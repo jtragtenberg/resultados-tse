@@ -74,8 +74,8 @@ def conta(chave, n=1):
         CONT[chave] += n
 
 
-def baixar(url):
-    """GET condicional. Devolve (json|None, mudou)."""
+def baixar(url, tentativa=1):
+    """GET condicional. Devolve (json|None, mudou). Falhas de rede transitórias (reset de conexão, timeout) ganham 1 nova tentativa."""
     req = urllib.request.Request(url, headers=dict(UA, **({"If-None-Match": etags[url]} if url in etags else {})))
     LIM.esperar()
     conta("requisicoes")
@@ -109,6 +109,9 @@ def baixar(url):
     except Limitado:
         raise
     except Exception:
+        if tentativa < 2:
+            time.sleep(1.5)
+            return baixar(url, tentativa + 1)
         conta("erros")
         raise
 
@@ -203,7 +206,7 @@ def ciclo(eleicao, db, estado, publicar=True, saida=None, limite=None, completo=
                 if m and m["tf"] and CICLO_N % 10:
                     continue                         # município já totalizado: só reconsulta de 10 em 10 ciclos
                 peso = 1 + (m["eleitores"] / 100000 if m else 0)   # cidades grandes valem mais atualização
-                sel.append(((agora_t - ULT.get(t[4], 0)) * peso, t))
+                sel.append(((agora_t - ULT.get(t[4], 0)) * peso if m else 1e12, t))   # nunca obtido (falhou antes): vai primeiro
         sel.sort(key=lambda x: -x[0])
         sel = [t for _, t in sel[:orcamento or int(LIM.max * 30)]]
     aplicar(sel)                                     # 2) municípios escolhidos
