@@ -1,0 +1,31 @@
+Oi Hermes! Preciso que você instale um coletor de apuração das eleições neste VPS. Siga os passos e me responda em português, curto.
+
+1) Baixe e leia o instalador antes de rodar (é um script bash que instala um serviço systemd):
+   curl -fsSL https://raw.githubusercontent.com/jtragtenberg/resultados-tse/main/dist/instalar-vps.sh -o instalar-vps.sh
+   (se eu tiver mandado o arquivo instalar-vps.sh aqui no Telegram, use o arquivo em vez do curl)
+   Veja as primeiras ~40 linhas e me diga o que ele faz.
+
+2) Teste primeiro com o 1º turno, que já tem votos (assim vemos dados de verdade):
+   sudo bash instalar-vps.sh --tunel --eleicao 6257
+   (se eu já tiver um domínio apontado para este VPS, use --dominio meu.dominio.com no lugar de --tunel)
+   Ele leva uns 3 a 5 minutos na primeira passada (baixa ~5.600 arquivos devagar de propósito, porque o TSE bloqueia com erro 429 se for rápido demais).
+
+3) Ao final ele imprime "PRONTO" com a URL dos dados. Me mande:
+   - a URL pública (termina em /latest.json) e o link "Abra o site com os dados deste servidor";
+   - o VEREDITO do verificador.
+
+4) Para eu conferir depois, sempre que eu perguntar "está funcionando?", rode:
+   python3 -I /opt/resultados-tse/verificar.py
+   e me responda com a linha VEREDITO e, se houver [ATENÇÃO] ou [FALHA], o que elas dizem.
+   Outros comandos úteis:
+   - estado do serviço: systemctl status resultados-tse --no-pager
+   - últimos logs: journalctl -u resultados-tse -n 30 --no-pager
+   - números da coleta: curl -s http://127.0.0.1:8000/status
+   Se aparecer "429", é o TSE limitando; o coletor reduz a velocidade sozinho, não precisa fazer nada.
+
+5) No dia 25/10 (2º turno), troque para a eleição 6258 SEM reinstalar (reinstalar mudaria a URL do túnel):
+   sudo sed -i 's/--eleicao 6257/--eleicao 6258/' /etc/systemd/system/resultados-tse.service
+   sudo systemctl daemon-reload && sudo systemctl restart resultados-tse
+   (o 6258 já responde, só está com votos zerados até a apuração começar; depois rode o verificador de novo)
+
+Não mexa em nada além do que está descrito. Se algo der erro, me mostre a mensagem completa antes de tentar outra coisa.

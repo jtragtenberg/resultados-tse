@@ -6,6 +6,7 @@
 <title>Apuração presidente</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap">
+<script src="config.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
 <style>
   /* Tokens da identidade (ver design.md): --tse-* = interface; --cand1/--cand2/--prog/--nada = codificação de dados */
@@ -67,6 +68,7 @@
   #barbox svg { width:100%; height:auto; max-height:76vh; display:block; touch-action:auto }
   #barbox text { fill:var(--fg); font-family:inherit } #barbox .ax { fill:var(--mut); font-size:11px } #barbox .vl { font-size:9.5px; fill:var(--mut) }
   #barbox .xl { font-size:11px; font-weight:500 } #barbox .gr { stroke:var(--line); stroke-width:1 } #barbox rect { cursor:pointer }
+  #barbox .gh { fill:none; stroke:var(--mut); stroke-width:1; stroke-dasharray:3 2 }
   #barbox .sel { stroke:var(--fg); stroke-width:2 }
   #loading { position:absolute; padding:8px; color:var(--mut) } #svgwrap { position:relative }
 </style>
@@ -94,6 +96,9 @@
       <button id="voltar" hidden>← Brasil</button>
       <strong id="titulo"></strong>
     </div>
+    <div class="bar" id="barOpc" hidden>
+      <span class="seg" id="segBCand"></span><span class="seg" id="segBVal"></span><span class="seg" id="segBUnid"></span>
+    </div>
     <div id="svgwrap"><div id="zoom"><button id="zin" title="aproximar">+</button><button id="zout" title="afastar">−</button><button id="zreset" title="ver tudo" style="font-size:12px">⌂</button></div><div id="loading" hidden>carregando malha do IBGE…</div><div id="svgbox"></div></div>
     <div id="barbox" hidden></div>
     <div class="leg" id="leg"></div>
@@ -115,11 +120,11 @@ const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).
 const escuroAgora = () => document.documentElement.dataset.theme ? document.documentElement.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
 function rotuloTema() { const b = document.getElementById("tema"), e = escuroAgora(); b.textContent = e ? "☀ Tema claro" : "☾ Tema escuro"; b.setAttribute("aria-pressed", e); }
 try { const t = localStorage.getItem("tema"); if (t) document.documentElement.dataset.theme = t; } catch {}
-const st = { vista:"mapa", nivel:"estados", metrica:"voto", uf:null, pin:null, ord:"uf", asc:true, tab:"votos", zk:null };
+const st = { bCand:"ambos", bVal:"abs", bUnid:"pct", vista:"mapa", nivel:"estados", metrica:"voto", uf:null, pin:null, ord:"uf", asc:true, tab:"votos", zk:null };
 const METRICAS = { abst:["Abstenção","#b8860b"], brancos:["Brancos","#6d4fc2"], nulos:["Nulos","#d0489a"] };   // nivel: estados | municipios | uf
 let dados = null; const geos = {};
 { const t = new URLSearchParams(location.hash.slice(1)).get('tema'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; }   // #tema=dark força o tema
-new URLSearchParams(location.hash.slice(1)).forEach((v,k) => { if (k==='metrica'||k==='nivel'||k==='uf'||k==='tab'||k==='ord'||k==='eleicao'||k==='frame'||k==='pct'||k==='vista') st[k==='frame'?'frame0':k]=k==='pct'?+v:v; });   // ex.: #metrica=abst&nivel=uf&uf=sp&eleicao=2022-t2&pct=0.5 (pct = fração de urnas apuradas)
+new URLSearchParams(location.hash.slice(1)).forEach((v,k) => { if (k==='metrica'||k==='nivel'||k==='uf'||k==='tab'||k==='ord'||k==='eleicao'||k==='frame'||k==='pct'||k==='vista'||k==='bcand'||k==='bval'||k==='bunid') st[{frame:'frame0',bcand:'bCand',bval:'bVal',bunid:'bUnid'}[k] ?? k]=k==='pct'?+v:v; });   // ex.: #metrica=abst&nivel=uf&uf=sp&eleicao=2022-t2&pct=0.5 (pct = fração de urnas apuradas)
 
 const N1 = () => (dados?.cands?.v1 ?? "Lula").split(" ")[0], N2 = () => (dados?.cands?.v2 ?? "Flávio").split(" ").slice(-1)[0];
 const pctApur = r => r && r.ts ? r.st/r.ts : 0;
@@ -243,49 +248,77 @@ function tabela() {
 }
 
 /* ---------- barras por estado, sempre da maior (esquerda) para a menor (direita) ---------- */
-const valorBarra = { voto:r => r.v1 + r.v2, apuracao:r => pctApur(r), abst:r => pAbst(r), brancos:r => pBrancos(r), nulos:r => pNulos(r) };
 const compacto = v => v >= 1e6 ? (v/1e6).toFixed(1).replace(".", ",") + " mi" : v >= 1e3 ? Math.round(v/1e3) + " mil" : String(Math.round(v));
 const curto = v => v >= 1e6 ? (v/1e6).toFixed(1).replace(".", ",") + "M" : v >= 1e3 ? Math.round(v/1e3) + "k" : String(Math.round(v));   // rótulo curto sobre a barra
+const somaUF = (D, k) => Object.entries(D.ufs).filter(([u]) => u !== "br").reduce((a, [, r]) => a + r[k], 0);
+// O que cada barra mede, conforme a aba e as opções. `abs` = quantidades (comparáveis entre SP e PI); senão, proporções.
+function configBarras(D) {
+  const M = st.metrica;
+  if (M === "voto") {
+    if (st.bCand === "ambos") return { empilhado:true, abs:true, val:r => r.v1 + r.v2 };
+    const k = st.bCand, tot = Math.max(1, somaUF(D, k));
+    if (st.bVal === "abs") return { abs:true, k, val:r => r[k] };
+    if (st.bVal === "dist") return { abs:false, k, val:r => r[k] / tot };
+    return { abs:false, k, val:r => (r.v1 + r.v2) ? r[k] / (r.v1 + r.v2) : 0 };
+  }
+  const campo = { abst:"abst", brancos:"brancos", nulos:"nulos" }[M];
+  if (st.bUnid === "abs") return { abs:true, val:M === "apuracao" ? r => r.total : r => r[campo] };
+  return { abs:false, val:M === "apuracao" ? pctApur : valorMetrica[M] };
+}
 function desenharBarras() {
-  const M = st.metrica, val = valorBarra[M], ehVoto = M === "voto";
+  const M = st.metrica, cfg = configBarras(dados), cfgF = configBarras(final ?? dados);
   const W = 900, H = 480, mg = { t:18, r:8, b:34, l:56 }, iw = W - mg.l - mg.r, ih = H - mg.t - mg.b;
-  const rows = Object.entries(dados.ufs).filter(([k]) => k !== "br").map(([k, r]) => ({ k, r, v:val(r) }))
+  const rows = Object.entries(dados.ufs).filter(([k]) => k !== "br").map(([k, r]) => ({ k, r, v:cfg.val(r) }))
     .sort((a, b) => b.v - a.v || a.k.localeCompare(b.k));
+  const finalUF = Object.fromEntries(Object.entries((final ?? dados).ufs));
+  const temFinal = cfg.abs && final && dados !== final;   // contorno tracejado = quanto vai ter ao fim da apuração
+  rows.forEach(d => d.fin = temFinal && finalUF[d.k] ? cfgF.val(finalUF[d.k]) : 0);
   // eixo vertical fixo na escala do resultado final: as barras crescem em vez de o eixo se mexer durante o replay
-  const ref = Object.entries((final ?? dados).ufs).filter(([k]) => k !== "br").map(([, r]) => val(r));
+  const ref = Object.entries((final ?? dados).ufs).filter(([k]) => k !== "br").map(([, r]) => cfgF.val(r));
   const y = d3.scaleLinear().domain([0, Math.max(...ref, ...rows.map(d => d.v), 1e-9)]).nice().range([ih, 0]);
   const x = d3.scaleBand(rows.map(d => d.k), [0, iw]).padding(0.16);
   const box = d3.select("#barbox");
   let svg = box.select("svg");
   if (svg.empty()) {
     svg = box.append("svg").attr("viewBox", `0 0 ${W} ${H}`).attr("role", "img").attr("aria-label", "Gráfico de barras por estado");
-    const g = svg.append("g").attr("transform", `translate(${mg.l},${mg.t})`);
-    g.append("g").attr("class", "grid"); g.append("g").attr("class", "bars");
+    const g0 = svg.append("g").attr("transform", `translate(${mg.l},${mg.t})`);
+    g0.append("g").attr("class", "grid"); g0.append("g").attr("class", "bars");
   }
   const g = svg.select("g"), t = d3.transition().duration(matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 280).ease(d3.easeCubicOut);
-  const fmtY = ehVoto ? compacto : v => Math.round(v * 1000) / 10 + "%";
+  const fmtY = cfg.abs ? compacto : v => Math.round(v * 1000) / 10 + "%", rotulo = cfg.abs ? curto : v => Math.round(v * 1000) / 10 + "%";
   g.select(".grid").selectAll("g").data(y.ticks(5)).join(e => { const t = e.append("g"); t.append("line").attr("class", "gr"); t.append("text").attr("class", "ax").attr("text-anchor", "end").attr("x", -8).attr("dy", "0.32em"); return t; })
     .attr("transform", d => `translate(0,${y(d)})`).call(a => a.select("line").attr("x2", iw)).call(a => a.select("text").text(fmtY));
-  const cor1 = ehVoto ? css("--cand1") : M === "apuracao" ? css("--prog") : METRICAS[M][1], cor2 = css("--cand2");
+  const cor1 = cfg.empilhado || !cfg.k ? (cfg.empilhado ? css("--cand1") : M === "apuracao" ? css("--prog") : METRICAS[M][1]) : css(cfg.k === "v1" ? "--cand1" : "--cand2"), cor2 = css("--cand2");
   const gb = g.select(".bars").selectAll("g.b").data(rows, d => d.k).join(e => {
     const b = e.append("g").attr("class", "b").attr("transform", d => `translate(${x(d.k)},0)`);
+    b.append("rect").attr("class", "gh").attr("y", ih).attr("height", 0);
     b.append("rect").attr("class", "r1").attr("y", ih).attr("height", 0); b.append("rect").attr("class", "r2").attr("y", ih).attr("height", 0);
     b.append("text").attr("class", "vl").attr("text-anchor", "middle").attr("y", ih - 4);
     b.append("text").attr("class", "xl").attr("text-anchor", "middle").attr("y", ih + 18);
     return b; });
-  gb.attr("data-k", d => d.k).on("mousemove", (ev, d) => tip(ev, tipHtml(d.k.toUpperCase(), d.r))).on("mouseleave", () => tip(null, null))
+  gb.attr("data-k", d => d.k).on("mousemove", (ev, d) => tip(ev, tipHtml(d.k.toUpperCase(), d.r) + (d.fin ? `<div class="m">ao fim da apuração: ${fmt.format(Math.round(d.fin))}</div>` : "")))
+    .on("mouseleave", () => tip(null, null))
     .on("click", (ev, d) => { st.pin = st.pin?.k === d.k ? null : { k:d.k, nome:d.k.toUpperCase() }; render(); });
   gb.transition(t).attr("transform", d => `translate(${x(d.k)},0)`);
+  gb.select(".gh").attr("x", 0).attr("width", x.bandwidth()).attr("pointer-events", "none")
+    .transition(t).attr("y", d => d.fin ? y(d.fin) : ih).attr("height", d => d.fin ? ih - y(d.fin) : 0);
   gb.select(".r1").attr("x", 0).attr("width", x.bandwidth()).attr("fill", cor1).classed("sel", d => st.pin?.k === d.k)
-    .transition(t).attr("y", d => y(ehVoto ? d.r.v1 : d.v)).attr("height", d => ih - y(ehVoto ? d.r.v1 : d.v));
+    .transition(t).attr("y", d => y(cfg.empilhado ? d.r.v1 : d.v)).attr("height", d => ih - y(cfg.empilhado ? d.r.v1 : d.v));
   gb.select(".r2").attr("x", 0).attr("width", x.bandwidth()).attr("fill", cor2).classed("sel", d => st.pin?.k === d.k)
-    .transition(t).attr("y", d => ehVoto ? y(d.v) : ih).attr("height", d => ehVoto ? y(d.r.v1) - y(d.v) : 0);
-  gb.select(".vl").attr("x", x.bandwidth() / 2).text(d => d.v ? (ehVoto ? curto(d.v) : Math.round(d.v * 1000) / 10 + "%") : "")
-    .transition(t).attr("y", d => y(d.v) - 4);
+    .transition(t).attr("y", d => cfg.empilhado ? y(d.v) : ih).attr("height", d => cfg.empilhado ? y(d.r.v1) - y(d.v) : 0);
+  gb.select(".vl").attr("x", x.bandwidth() / 2).text(d => d.v ? rotulo(d.v) : "")
+    .transition(t).attr("y", d => y(Math.max(d.v, d.fin || 0)) - 4);
   gb.select(".xl").attr("x", x.bandwidth() / 2).text(d => d.k === "zz" ? "EXT" : d.k.toUpperCase());
-  document.getElementById("leg").innerHTML = ehVoto
-    ? `<i style="background:linear-gradient(90deg,var(--cand1) 50%,var(--cand2) 50%)"></i><span>cada barra = votos válidos apurados (${N1()} embaixo, ${N2()} em cima), do estado com mais votos para o com menos · clique numa barra para ver os detalhes</span>`
-    : `<i style="background:${cor1}"></i><span>${M === "apuracao" ? "% de urnas apuradas" : METRICAS[M][0] + " (% " + (M === "abst" ? "dos eleitores das seções apuradas" : "dos votos apurados") + ")"} por estado, em ordem decrescente · eixo fixo na escala do resultado final</span>`;
+  const nome = cfg.k ? (cfg.k === "v1" ? N1() : N2()) : "";
+  let txt;
+  if (M === "voto") txt = cfg.empilhado
+    ? `cada barra = votos válidos apurados (${N1()} embaixo, ${N2()} em cima)`
+    : st.bVal === "abs" ? `votos de ${nome} apurados em cada estado`
+    : st.bVal === "dist" ? `parte da votação total de ${nome} (já apurada) que vem de cada estado: as barras somam 100%`
+    : `% dos votos válidos que ${nome} tem em cada estado (sobre ${N1()} + ${N2()})`;
+  else txt = M === "apuracao" ? (cfg.abs ? "votos apurados (comparecimento já contado) em cada estado" : "% de urnas apuradas")
+    : `${METRICAS[M][0]} ${cfg.abs ? "(quantidade)" : "(% " + (M === "abst" ? "dos eleitores das seções apuradas" : "dos votos apurados") + ")"}`;
+  document.getElementById("leg").innerHTML = `<i style="background:${cfg.empilhado ? "linear-gradient(90deg,var(--cand1) 50%,var(--cand2) 50%)" : cor1}"></i><span>${txt}, do estado com mais para o com menos · eixo fixo na escala do resultado final${temFinal ? " · contorno tracejado = total ao fim da apuração" : ""} · clique numa barra para ver os detalhes</span>`;
 }
 function seg(id, opts, key) {
   const el = document.getElementById(id); el.innerHTML = "";
@@ -301,7 +334,16 @@ function render() {
   seg("segMetrica", [["voto","Votos válidos"],["apuracao","Urnas apuradas"],["abst","Abstenção"],["brancos","Brancos"],["nulos","Nulos"]], "metrica");
   { const el = document.getElementById("segTab"); el.innerHTML = "";
     [["votos","Votos"],["outros","Abstenção, brancos e nulos"]].forEach(([v,t]) => { const b = document.createElement("button"); b.textContent = t; b.className = st.tab === v ? "on" : ""; b.onclick = () => { st.tab = v; tabela(); document.querySelectorAll("#segTab button").forEach(x => x.className = x.textContent === t ? "on" : ""); }; el.appendChild(b); }); }
-  const barras = st.vista === "barras";
+  const barras = st.vista === "barras", M = st.metrica;
+  document.getElementById("barOpc").hidden = !barras;
+  if (barras) {
+    seg("segBCand", [["ambos","Os dois candidatos"],["v1",N1()],["v2",N2()]], "bCand");
+    seg("segBVal", [["abs","Votos"],["dist",`Distribuição (% do total de ${st.bCand === "v2" ? N2() : N1()})`],["pct","% dos válidos no estado"]], "bVal");
+    seg("segBUnid", [["pct","Porcentagem"],["abs", M === "apuracao" ? "Quantidade de votos apurados" : "Quantidade"]], "bUnid");
+    document.getElementById("segBCand").hidden = M !== "voto";
+    document.getElementById("segBVal").hidden = M !== "voto" || st.bCand === "ambos";
+    document.getElementById("segBUnid").hidden = M === "voto";
+  }
   document.getElementById("segNivel").hidden = barras; document.getElementById("svgwrap").hidden = barras; document.getElementById("barbox").hidden = !barras;
   voltar.hidden = barras || st.nivel !== "uf";
   titulo.textContent = barras ? "Estados do maior para o menor valor" : st.nivel === "uf" ? st.uf.toUpperCase() + " por município" : "";
@@ -314,11 +356,32 @@ const ELEICOES = [
   { id:"2026-t1", rotulo:"2026 · 1º turno", replay:true }, { id:"live", rotulo:"2026 · 2º turno", live:true },
 ];
 st.eleicao ??= "live";
-const urlDe = e => e === "live" ? "../dados/latest.json" : `../dados/hist/${e}.json`;
+/* Fonte dos dados ao vivo: ?api=URL (salva no navegador) > web/config.js > ../dados/latest.json (coletor local) */
+const API = (() => {
+  const ok = u => { try { const x = new URL(u); return (x.protocol === "https:" || x.hostname === "localhost" || x.hostname === "127.0.0.1") ? x.origin + x.pathname.replace(/\/+$/, "") : ""; } catch { return ""; } };
+  const p = new URLSearchParams(location.search).get("api") ?? new URLSearchParams(location.hash.slice(1)).get("api");
+  try { if (p !== null) { p === "" ? localStorage.removeItem("api") : localStorage.setItem("api", ok(p)); } } catch {}
+  let salvo = ""; try { salvo = localStorage.getItem("api") || ""; } catch {}
+  return ok(p ?? "") || ok(salvo) || ok(window.API_AO_VIVO || "");
+})();
+const urlDe = e => e === "live" ? (API ? `${API}/latest.json` : "../dados/latest.json") : `../dados/hist/${e}.json`;
+// dados de uma API externa são tratados como não confiáveis: números viram números e textos são escapados antes de ir para o HTML
+const esc = x => String(x ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+function sanear(d) {
+  const NUM = ["ts","st","eleitores","v1","v2","validos","total","comp","abst","brancos","nulos"];
+  const lim = r => { for (const k of NUM) r[k] = Number(r[k]) || 0; r.uf = String(r.uf ?? "").replace(/[^a-z]/gi, "").toLowerCase(); r.nm = esc(r.nm); r.dg = esc(r.dg); r.hg = esc(r.hg); r.tf = r.tf === true; return r; };
+  const ufs = {}, mun = {};
+  for (const [k, r] of Object.entries(d.ufs ?? {})) ufs[esc(k).slice(0, 4)] = lim({ ...r });
+  for (const [k, r] of Object.entries(d.mun ?? {})) mun[esc(k).slice(0, 12)] = lim({ ...r });
+  return { ufs, mun, cands: { v1: esc(d.cands?.v1), v2: esc(d.cands?.v2) }, eleicao: esc(d.eleicao), gerado: esc(d.gerado), ts_epoch: Number(d.ts_epoch) || null };
+}
 const cacheHist = {};
 async function buscar(e) {
   if (e !== "live" && cacheHist[e]) return cacheHist[e];
-  const d = await (await fetch(urlDe(e), {cache: "no-store"})).json();
+  const resp = await fetch(urlDe(e), {cache: "no-store"});
+  if (!resp.ok) throw new Error(resp.status);
+  let d = await resp.json();
+  if (e === "live" && API) d = sanear(d);
   if (e !== "live") cacheHist[e] = d;
   return d;
 }
@@ -397,14 +460,21 @@ async function trocar(e) {
   try { const d = await buscar(e); st.eleicao = e; final = d; dados = d; st.frame = null; await prepararReplay(); aplicar(); }
   catch { document.getElementById("meta").textContent = e === "live" ? "dados ao vivo indisponíveis: rode o coletor (python3 apuracao.py) localmente" : "dados desta eleição indisponíveis (rode historico2022.py / --arquivar)"; }
 }
+function metaTexto() {   // no ao vivo, mostra há quanto tempo o coletor gerou o dado (alerta se passar de 2 min)
+  const m = document.getElementById("meta");
+  if (st.eleicao !== "live") { m.textContent = `${rotuloEleicao()} · resultado final${replay ? " · use o slider para rever a apuração" : " (arquivo)"}`; return; }
+  const idade = dados?.ts_epoch ? Math.max(0, Math.round(Date.now() / 1000 - dados.ts_epoch)) : null;
+  const txt = idade == null ? `coletado ${dados.gerado}` : idade < 90 ? `atualizado há ${idade} s` : `SEM DADO NOVO HÁ ${Math.round(idade / 60)} MIN`;
+  m.textContent = `${dados.eleicao} · ${txt} · confere a cada 30 s${API ? " · fonte: servidor remoto" : ""}`;
+  m.style.fontWeight = idade != null && idade >= 120 ? "700" : "";
+}
+setInterval(() => { if (st.eleicao === "live" && dados) metaTexto(); }, 1000);
 const rotuloEleicao = () => ELEICOES.find(e => e.id === st.eleicao)?.rotulo ?? dados.eleicao;
 function aplicar() {
   document.getElementById("fonte").textContent = st.eleicao === "live" ? `coletado em ${dados.gerado}` : `${rotuloEleicao()}: resultado final${replay ? " e boletins de urna por horário de chegada" : ""}`;
   document.getElementById("n1").textContent = dados.cands?.v1 ?? "Lula";
   document.getElementById("n2").textContent = dados.cands?.v2 ?? "Flávio Bolsonaro";
-  document.getElementById("meta").textContent = st.eleicao === "live"
-    ? `${dados.eleicao} · coletado ${dados.gerado} · atualiza sozinho a cada 30 s`
-    : `${rotuloEleicao()} · resultado final (arquivo)`;
+  metaTexto();
   desenharLinha();
   if (replay && st.frame0 != null && !aplicar.feito) { aplicar.feito = true; return irParaQuadro(+st.frame0); }
   aplicar.feito = true;
@@ -417,7 +487,8 @@ async function carregar() {
   catch (e) {
     // versão publicada (GitHub Pages) não tem coletor: sem dados ao vivo, abre a eleição mais recente com resultado arquivado
     if (st.eleicao === "live" && !new URLSearchParams(location.hash.slice(1)).has("eleicao")) {
-      st.eleicao = ELEICOES.filter(x => !x.live).at(-1).id; return carregar();
+      st.eleicao = ELEICOES.filter(x => !x.live).at(-1).id; await carregar();
+      document.getElementById("meta").textContent += API ? " · ao vivo indisponível (servidor remoto não respondeu)" : " · ao vivo indisponível (sem coletor)"; return;
     }
     document.getElementById("meta").textContent = "aguardando o coletor gerar dados/latest.json…";
   }
