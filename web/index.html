@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Apuração presidente</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<style>
+  /* Tokens da identidade (ver design.md): --tse-* = interface; --cand1/--cand2/--prog/--nada = codificação de dados */
+  :root { --tse-amarelo:#EBB400; --tse-texto:#1A1B1F; --tse-texto-sec:#44474E; --tse-borda:#DEE2E6; --tse-acao:#005CBB; --tse-erro:#BA1A1A; --tse-sucesso:#3A833A;
+          --bg:#E8E8E8; --fg:var(--tse-texto); --mut:var(--tse-texto-sec); --card:#fff; --line:var(--tse-borda);
+          --cand1:#c8102e; --cand2:#1f5fbf; --nada:#cfcfcf; --prog:#0f7b6c; }
+  /* tema escuro: automático pelo sistema, ou forçado pelo botão (data-theme no <html>) */
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#161616; --fg:#eee; --mut:#a0a0a0; --card:#222; --line:#383838; --tse-acao:#7db2f5; --cand1:#e0405a; --cand2:#5b97f0; --nada:#444; --prog:#3fc0aa; color-scheme:dark } }
+  :root[data-theme="dark"] { --bg:#161616; --fg:#eee; --mut:#a0a0a0; --card:#222; --line:#383838; --tse-acao:#7db2f5; --cand1:#e0405a; --cand2:#5b97f0; --nada:#444; --prog:#3fc0aa; color-scheme:dark }
+  :root[data-theme="light"] { color-scheme:light }
+  * { box-sizing:border-box }
+  body { margin:0; background:var(--bg); color:var(--fg); font:400 14px/1.4 Roboto,"Helvetica Neue",Helvetica,Arial,sans-serif; font-variant-numeric:tabular-nums }
+  :focus-visible { outline:2px solid var(--tse-acao); outline-offset:2px }
+  @media (prefers-reduced-motion:reduce) { * { transition:none !important; animation:none !important } }
+  header { background:var(--tse-amarelo); color:var(--tse-texto); padding:12px 16px; margin-bottom:12px; display:flex; flex-wrap:wrap; gap:4px 24px; align-items:baseline; justify-content:space-between }
+  h1 { font-size:18px; font-weight:700; margin:0 } #sub { font-weight:500; margin-left:8px } #meta { font-size:12px; color:var(--tse-texto) } header .dir { display:flex; gap:12px; align-items:center }
+  #tema { background:transparent; border:1px solid var(--tse-texto); color:var(--tse-texto); padding:2px 10px; font-size:12px }
+  footer { padding:0 16px 24px; font-size:12px; color:var(--mut) } footer a { color:var(--tse-acao) }
+  .big { font-size:26px; font-weight:700; line-height:1.15 }
+  main { display:grid; grid-template-columns:minmax(0,1fr) 340px; gap:16px; padding:0 16px 24px }
+  @media (max-width:900px) { main { grid-template-columns:minmax(0,1fr) } }
+  main > *, aside > * { min-width:0 }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:12px }
+  .bar { display:flex; flex-wrap:wrap; gap:8px 16px; align-items:center; margin-bottom:8px }
+  .seg { display:inline-flex; max-width:100%; overflow-x:auto; border:1px solid var(--line); border-radius:6px } .seg button { white-space:nowrap }
+  .seg button { border:0; border-radius:0; border-right:1px solid var(--line) } .seg button:last-child { border-right:0 }
+  .seg button.on { background:var(--fg); color:var(--bg); font-weight:500 }
+  button { font:inherit; padding:4px 10px; border:1px solid var(--line); background:var(--card); color:var(--fg); border-radius:6px; cursor:pointer }
+  #svgbox svg { width:100%; height:auto; max-height:76vh; display:block }
+  path { stroke:var(--bg); stroke-width:.4; vector-effect:non-scaling-stroke } path.uf { cursor:pointer; stroke-width:1 }
+  path.pin { stroke:var(--fg); stroke-width:2 }
+  #svgbox svg { cursor:grab; touch-action:none } #svgbox svg:active { cursor:grabbing }
+  #zoom { position:absolute; right:8px; top:8px; display:flex; flex-direction:column; gap:4px; z-index:2 } #zoom button { width:30px; padding:4px 0; font-size:16px }
+  .barra { display:flex; height:18px; border-radius:4px; overflow:hidden; background:var(--nada); margin:4px 0 }
+  .barra div { height:100% }
+  .prog { height:10px; border-radius:5px; background:var(--nada); overflow:hidden; margin:4px 0 } .prog div { height:100%; background:var(--prog) }
+  .placar { display:flex; justify-content:space-between; font-weight:600 }
+  .l { color:var(--cand1) } .f { color:var(--cand2) } .m { color:var(--mut); font-size:12px }
+  table { width:100%; border-collapse:collapse; font-size:13px } td, th { padding:3px 4px; text-align:right; border-bottom:1px solid var(--line) }
+  th { color:var(--mut); font-weight:500; user-select:none; cursor:pointer } td:first-child, th:first-child { text-align:left }
+  tr.sel { background:rgba(128,128,128,.18) } tbody tr { cursor:pointer }
+  #tip { position:fixed; pointer-events:none; background:var(--card); border:1px solid var(--line); padding:6px 8px; border-radius:6px; font-size:12px; display:none; z-index:9 }
+  .leg { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--mut); margin-top:8px; flex-wrap:wrap }
+  .leg i { display:inline-block; width:120px; height:10px; border-radius:2px }
+  #linha { display:flex; align-items:center; gap:0; padding:0 16px 12px; overflow-x:auto }
+  #linha button { position:relative; border:0; background:none; padding:18px 14px 4px; color:var(--mut); border-radius:0; white-space:nowrap; font-size:13px }
+  #linha button::before { content:""; position:absolute; top:6px; left:50%; width:10px; height:10px; margin-left:-5px; border-radius:50%; background:var(--mut); opacity:.55; border:2px solid var(--bg); box-shadow:0 0 0 1px var(--mut); z-index:1 }
+  #linha button::after { content:""; position:absolute; top:10px; left:50%; width:100%; height:2px; background:var(--mut); opacity:.35 }
+  #linha button:last-child::after { display:none }
+  #linha button.on { color:var(--fg); font-weight:700 } #linha button.on::before { background:var(--fg); box-shadow:0 0 0 1px var(--fg); opacity:1 }
+  #linha button.live::before { background:var(--tse-erro); opacity:1; box-shadow:0 0 0 1px var(--tse-erro) }
+  #tempo { display:none; margin:0 16px 12px; padding:10px 12px; gap:12px; align-items:center; flex-wrap:wrap }
+  #tempo.on { display:flex }
+  #tempo button { min-width:34px } #tempo input[type=range] { flex:1 1 260px; min-width:160px; accent-color:var(--prog) }
+  #tlock { display:inline-flex; gap:6px; align-items:center; cursor:pointer } #tlock input { accent-color:var(--tse-acao) }
+  #tlabel { min-width:230px; font-size:13px } #tlabel b { font-size:15px }
+  #tspark { width:100%; height:34px; display:block } #tspark path { stroke:none; vector-effect:none }
+  [hidden] { display:none !important }
+  #barbox svg { width:100%; height:auto; max-height:76vh; display:block; touch-action:auto }
+  #barbox text { fill:var(--fg); font-family:inherit } #barbox .ax { fill:var(--mut); font-size:11px } #barbox .vl { font-size:9.5px; fill:var(--mut) }
+  #barbox .xl { font-size:11px; font-weight:500 } #barbox .gr { stroke:var(--line); stroke-width:1 } #barbox rect { cursor:pointer }
+  #barbox .sel { stroke:var(--fg); stroke-width:2 }
+  #loading { position:absolute; padding:8px; color:var(--mut) } #svgwrap { position:relative }
+</style>
+</head>
+<body>
+<header>
+  <h1>Apuração presidente<span id="sub"><span id="n1">Lula</span> x <span id="n2">Flávio Bolsonaro</span></span></h1>
+  <div class="dir"><div id="meta">carregando…</div><button id="tema" aria-pressed="false" title="alternar tema claro/escuro"></button></div>
+</header>
+<nav id="linha" aria-label="Linha do tempo de eleições"></nav>
+<section class="card" id="tempo" aria-label="Replay da apuração">
+  <button id="tplay" title="tocar / pausar (espaço)">▶</button>
+  <input type="range" id="tslider" min="0" max="1000" value="1000" step="1" aria-label="Porcentagem de urnas apuradas">
+  <div id="tlabel"></div>
+  <button id="tfinal" title="ir ao resultado final">Final</button>
+  <label id="tlock" class="m" title="Ao trocar de eleição na linha do tempo (ou com ← →), o slider continua na mesma porcentagem de urnas apuradas"><input type="checkbox" id="tlockbox" checked> manter a % ao trocar de eleição</label>
+  <svg id="tspark" viewBox="0 0 600 34" preserveAspectRatio="none" aria-hidden="true"></svg>
+</section>
+<main>
+  <section class="card">
+    <div class="bar">
+      <span class="seg" id="segVista"></span>
+      <span class="seg" id="segNivel"></span>
+      <span class="seg" id="segMetrica"></span>
+      <button id="voltar" hidden>← Brasil</button>
+      <strong id="titulo"></strong>
+    </div>
+    <div id="svgwrap"><div id="zoom"><button id="zin" title="aproximar">+</button><button id="zout" title="afastar">−</button><button id="zreset" title="ver tudo" style="font-size:12px">⌂</button></div><div id="loading" hidden>carregando malha do IBGE…</div><div id="svgbox"></div></div>
+    <div id="barbox" hidden></div>
+    <div class="leg" id="leg"></div>
+  </section>
+  <aside style="display:flex;flex-direction:column;gap:16px">
+    <section class="card" id="detalhe"></section>
+    <section class="card"><div class="seg" id="segTab" style="margin-bottom:8px"></div><table id="tab"><thead></thead><tbody></tbody></table></section>
+  </aside>
+</main>
+<footer>Fonte: TSE — Divulgação de resultados (<a href="https://resultados.tse.jus.br/" rel="noopener">resultados.tse.jus.br</a>) e Portal de Dados Abertos · <span id="fonte">–</span><br>Projeto independente, sem vínculo com a Justiça Eleitoral.</footer>
+<div id="tip"></div>
+<script>
+const COD = {ac:12,al:27,am:13,ap:16,ba:29,ce:23,df:53,es:32,go:52,ma:21,mg:31,ms:50,mt:51,pa:15,pb:25,pe:26,pi:22,pr:41,rj:33,rn:24,rs:43,ro:11,rr:14,sc:42,se:28,sp:35,to:17};
+const UF_DE_COD = Object.fromEntries(Object.entries(COD).map(([k,v]) => [v,k]));
+const IBGE = "https://servicodados.ibge.gov.br/api/v3/malhas";
+const fmt = new Intl.NumberFormat("pt-BR"), pc = x => (x*100).toFixed(1).replace(".",",")+"%";
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+/* tema: preferência salva (se o navegador permitir); sem preferência, segue o sistema */
+const escuroAgora = () => document.documentElement.dataset.theme ? document.documentElement.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+function rotuloTema() { const b = document.getElementById("tema"), e = escuroAgora(); b.textContent = e ? "☀ Tema claro" : "☾ Tema escuro"; b.setAttribute("aria-pressed", e); }
+try { const t = localStorage.getItem("tema"); if (t) document.documentElement.dataset.theme = t; } catch {}
+const st = { vista:"mapa", nivel:"estados", metrica:"voto", uf:null, pin:null, ord:"uf", asc:true, tab:"votos", zk:null };
+const METRICAS = { abst:["Abstenção","#b8860b"], brancos:["Brancos","#6d4fc2"], nulos:["Nulos","#d0489a"] };   // nivel: estados | municipios | uf
+let dados = null; const geos = {};
+{ const t = new URLSearchParams(location.hash.slice(1)).get('tema'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; }   // #tema=dark força o tema
+new URLSearchParams(location.hash.slice(1)).forEach((v,k) => { if (k==='metrica'||k==='nivel'||k==='uf'||k==='tab'||k==='ord'||k==='eleicao'||k==='frame'||k==='pct'||k==='vista') st[k==='frame'?'frame0':k]=k==='pct'?+v:v; });   // ex.: #metrica=abst&nivel=uf&uf=sp&eleicao=2022-t2&pct=0.5 (pct = fração de urnas apuradas)
+
+const N1 = () => (dados?.cands?.v1 ?? "Lula").split(" ")[0], N2 = () => (dados?.cands?.v2 ?? "Flávio").split(" ").slice(-1)[0];
+const pctApur = r => r && r.ts ? r.st/r.ts : 0;
+const pAbst = r => r && r.comp + r.abst ? r.abst/(r.comp + r.abst) : 0;
+const pBrancos = r => r && r.total ? r.brancos/r.total : 0;
+const pNulos = r => r && r.total ? r.nulos/r.total : 0;
+const valorMetrica = { abst:pAbst, brancos:pBrancos, nulos:pNulos };
+let escala = {};   // domínio máximo por métrica: percentil 95 dos municípios, para a cor não ficar toda no mesmo tom
+function calcEscala() {
+  for (const k in valorMetrica) {
+    const v = Object.values(dados.mun).filter(r => r.st).map(valorMetrica[k]).sort((a,b) => a-b);
+    escala[k] = v.length ? Math.max(v[Math.floor(v.length*0.95)], 0.01) : 0.1;
+  }
+}
+const partes = r => { const t = r.v1 + r.v2; return t ? [r.v1/t, r.v2/t] : [0,0] };
+function cor(r) {
+  if (!r || !r.st) return css("--nada");
+  if (st.metrica === "apuracao") return d3.interpolateRgb("#e4efec", css("--prog"))(pctApur(r));
+  if (METRICAS[st.metrica]) return d3.interpolateRgb("#eeeeee", METRICAS[st.metrica][1])(Math.min(1, valorMetrica[st.metrica](r) / escala[st.metrica]));
+  const [l,f] = partes(r), m = Math.max(-1, Math.min(1, (l-f)*2.5));
+  return d3.interpolateRgb(css("--cand1"), css("--cand2"))((1 - m) / 2);   // vermelho (cand1) → roxo (equilíbrio) → azul (cand2); satura com 40 pp de vantagem
+}
+const opac = r => st.metrica === "voto" && r && r.st ? 0.35 + 0.65*pctApur(r) : 1;
+
+const tipEl = document.getElementById("tip");
+function tip(ev, html) { tipEl.style.display = html ? "block" : "none"; if (!html) return;
+  tipEl.innerHTML = html; tipEl.style.left = Math.min(ev.clientX+12, innerWidth-230)+"px"; tipEl.style.top = (ev.clientY+12)+"px"; }
+function blocoVotos(r, grande) {
+  if (!r) return "<span class='m'>sem dados</span>";
+  const [l,f] = partes(r);
+  return `${grande ? `<div class="m">Urnas apuradas</div><div class="big">${pc(pctApur(r))}</div><div class="m">${fmt.format(r.st)} de ${fmt.format(r.ts)} seções</div>` : `<div class="m">Urnas apuradas: <b>${pc(pctApur(r))}</b> (${fmt.format(r.st)} de ${fmt.format(r.ts)})</div>`}
+    <div class="prog"><div style="width:${pctApur(r)*100}%"></div></div>
+    <div class="placar"><span class="l">${N1()} ${r.st ? pc(l) : "–"}</span><span class="f">${r.st ? pc(f) : "–"} ${N2()}</span></div>
+    <div class="barra"><div style="width:${l*100}%;background:var(--cand1)"></div><div style="width:${f*100}%;background:var(--cand2)"></div></div>
+    <div class="m">${fmt.format(r.v1)} × ${fmt.format(r.v2)} votos válidos (sobre ${N1()} + ${N2()})</div>
+    <div class="m" style="margin-top:4px">Abstenção <b>${r.st ? pc(pAbst(r)) : "–"}</b> (${fmt.format(r.abst)}) · Brancos <b>${r.st ? pc(pBrancos(r)) : "–"}</b> (${fmt.format(r.brancos)}) · Nulos <b>${r.st ? pc(pNulos(r)) : "–"}</b> (${fmt.format(r.nulos)})</div>`;
+}
+const tipHtml = (nome, r) => `<b>${nome}</b><br>${blocoVotos(r)}`;
+
+// a malha do IBGE vem com anéis no sentido oposto ao que o d3 espera (senão o polígono vira "o globo inteiro")
+function rebobinar(fc) {
+  const inv = rs => rs.map(r => r.slice().reverse());
+  fc.features.forEach(f => { const g = f.geometry;
+    g.coordinates = g.type === "Polygon" ? inv(g.coordinates) : g.coordinates.map(inv); });
+  return fc;
+}
+async function geo(url) { if (!geos[url]) { loading.hidden = false; try { geos[url] = rebobinar(await (await fetch(url)).json()); } finally { loading.hidden = true; } } return geos[url]; }
+
+async function desenhar() {
+  const q = "formato=application/vnd.geo+json&qualidade=minima";
+  let url, chave, registro, nome, pinKey;
+  if (st.nivel === "estados") { url = `${IBGE}/paises/BR?${q}&intrarregiao=UF`; chave = f => UF_DE_COD[+f.properties.codarea]; registro = f => dados.ufs[chave(f)]; nome = f => chave(f).toUpperCase(); }
+  else if (st.nivel === "municipios") { url = `${IBGE}/paises/BR?${q}&intrarregiao=municipio`; chave = f => f.properties.codarea; registro = f => dados.mun[chave(f)]; nome = f => { const r = registro(f); return r ? `${r.nm} – ${r.uf.toUpperCase()}` : chave(f); }; }
+  else { url = `${IBGE}/estados/${COD[st.uf]}?${q}&intrarregiao=municipio`; chave = f => f.properties.codarea; registro = f => dados.mun[chave(f)]; nome = f => registro(f)?.nm ?? chave(f); }
+  const fc = await geo(url);
+  const W = 800, H = 720, box = d3.select("#svgbox"); box.selectAll("*").remove();
+  const svg = box.append("svg").attr("viewBox", `0 0 ${W} ${H}`);
+  const path = d3.geoPath(d3.geoMercator().fitSize([W,H], fc));
+  const g = svg.append("g");
+  const nz = st.nivel + ":" + st.uf;
+  if (st.zk !== nz) { st.zk = nz; st.zt = d3.zoomIdentity; }   // trocou de nível: zoom volta ao início
+  zoom = d3.zoom().scaleExtent([1, 60]).translateExtent([[-W*0.1,-H*0.1],[W*1.1,H*1.1]]).on("zoom", ev => { st.zt = ev.transform; g.attr("transform", ev.transform); });
+  svg.call(zoom).call(zoom.transform, st.zt).on("dblclick.zoom", null);
+  g.selectAll("path").data(fc.features).join("path").attr("d", path).attr("class", st.nivel === "estados" ? "uf" : "")
+    .attr("fill", f => cor(registro(f))).attr("fill-opacity", f => opac(registro(f)))
+    .classed("pin", f => st.pin && st.pin.k === chave(f))
+    .on("mousemove", (ev,f) => { tip(ev, tipHtml(nome(f), registro(f))); })
+    .on("mouseleave", () => tip(null,null))
+    .on("click", (ev,f) => {
+      if (st.nivel === "estados") { st.uf = chave(f); st.nivel = "uf"; st.pin = null; }
+      else st.pin = { k: chave(f), nome: nome(f), r: registro(f) };
+      render();
+    });
+  legenda();
+}
+let zoom;
+const svgSel = () => d3.select("#svgbox svg");
+const DUR = () => matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 220;
+zin.onclick = () => svgSel().transition().duration(DUR()).call(zoom.scaleBy, 1.8);
+zout.onclick = () => svgSel().transition().duration(DUR()).call(zoom.scaleBy, 1/1.8);
+zreset.onclick = () => svgSel().transition().duration(DUR()).call(zoom.transform, d3.zoomIdentity);
+function legenda() {
+  const M = METRICAS[st.metrica];
+  document.getElementById("leg").innerHTML = M
+    ? `<i style="background:linear-gradient(90deg,#eee,${M[1]})"></i><span>${M[0]}: 0% → ${pc(escala[st.metrica])} (ou mais) · cinza = nenhuma urna apurada · % sobre ${st.metrica === "abst" ? "eleitores nas seções apuradas" : "votos totais apurados"}</span>`
+    : st.metrica === "apuracao"
+    ? `<i style="background:linear-gradient(90deg,#e4efec,var(--prog))"></i><span>0% → 100% das urnas apuradas · cinza = nenhuma urna apurada</span>`
+    : `<i style="background:linear-gradient(90deg,var(--cand1),var(--cand2))"></i><span>vermelho = ${N1()} na frente · azul = ${N2()} na frente · roxo = disputa equilibrada · quanto mais puro o tom, maior a vantagem · transparente = poucas urnas apuradas · cinza = nenhuma urna apurada</span>`;
+}
+
+function detalhe() {
+  let nome, r;
+  if (st.pin) { nome = st.pin.nome; r = dados.mun[st.pin.k] ?? dados.ufs[st.pin.k]; }
+  else if (st.nivel === "uf") { nome = st.uf.toUpperCase(); r = dados.ufs[st.uf]; }
+  else { nome = "Brasil"; r = dados.ufs.br; }
+  document.getElementById("detalhe").innerHTML = `<div style="font-size:16px;font-weight:700;margin-bottom:4px">${nome}${r?.tf ? ' <span class="m">· totalização final</span>' : ""}</div>${blocoVotos(r, true)}
+    <div class="m" style="margin-top:6px">arquivo TSE gerado em ${r ? r.dg + " " + r.hg : "–"}${st.pin ? ' · <a href="#" id="unpin">limpar seleção</a>' : "<br>clique numa região do mapa para fixar os detalhes"}</div>`;
+  const u = document.getElementById("unpin"); if (u) u.onclick = e => { e.preventDefault(); st.pin = null; render(); };
+}
+
+const COLS = {
+  votos: [["uf","UF",""],["ap","Urnas apuradas",""],["l","{1}","l"],["f","{2}","f"]],
+  outros: [["uf","UF",""],["ap","Urnas apuradas",""],["ab","Abstenção",""],["br","Brancos",""],["nu","Nulos",""]],
+};
+const VAL = { ap:r => pctApur(r), l:r => r.st ? partes(r)[0] : -1, f:r => r.st ? partes(r)[1] : -1,
+              ab:r => r.st ? pAbst(r) : -1, br:r => r.st ? pBrancos(r) : -1, nu:r => r.st ? pNulos(r) : -1 };
+function tabela() {
+  const cols = COLS[st.tab];
+  if (!cols.some(c => c[0] === st.ord)) { st.ord = "uf"; st.asc = true; }
+  d3.select("#tab thead").html("<tr>" + cols.map(([k,t,c]) => `<th data-k="${k}" class="${c}">${t.replace("{1}", N1()).replace("{2}", N2())}${st.ord === k ? (st.asc ? " ▲" : " ▼") : ""}</th>`).join("") + "</tr>");
+  document.querySelectorAll("#tab th").forEach(th => th.onclick = () => {
+    const k = th.dataset.k; st.asc = st.ord === k ? !st.asc : k === "uf"; st.ord = k; tabela(); });   // 1º clique: maior primeiro (UF: A→Z)
+  const dir = st.asc ? 1 : -1;
+  const rows = Object.entries(dados.ufs).filter(([k]) => k !== "br")
+    .sort((a,b) => st.ord === "uf" ? dir * a[0].localeCompare(b[0]) : dir * (VAL[st.ord](a[1]) - VAL[st.ord](b[1])) || a[0].localeCompare(b[0]));
+  const cel = (k, r) => k === "ap" ? pc(pctApur(r)) : r.st ? pc(VAL[k](r)) : "–";
+  d3.select("#tab tbody").selectAll("tr").data(rows, d => d[0]).join("tr").order()
+    .classed("sel", d => d[0] === st.uf)
+    .on("click", (ev,d) => { if (d[0] === "zz") return; st.uf = d[0]; st.nivel = "uf"; st.pin = null; render(); })
+    .html(d => `<td>${d[0].toUpperCase()}</td>` + cols.slice(1).map(([k]) => `<td>${cel(k, d[1])}</td>`).join(""));
+}
+
+/* ---------- barras por estado, sempre da maior (esquerda) para a menor (direita) ---------- */
+const valorBarra = { voto:r => r.v1 + r.v2, apuracao:r => pctApur(r), abst:r => pAbst(r), brancos:r => pBrancos(r), nulos:r => pNulos(r) };
+const compacto = v => v >= 1e6 ? (v/1e6).toFixed(1).replace(".", ",") + " mi" : v >= 1e3 ? Math.round(v/1e3) + " mil" : String(Math.round(v));
+const curto = v => v >= 1e6 ? (v/1e6).toFixed(1).replace(".", ",") + "M" : v >= 1e3 ? Math.round(v/1e3) + "k" : String(Math.round(v));   // rótulo curto sobre a barra
+function desenharBarras() {
+  const M = st.metrica, val = valorBarra[M], ehVoto = M === "voto";
+  const W = 900, H = 480, mg = { t:18, r:8, b:34, l:56 }, iw = W - mg.l - mg.r, ih = H - mg.t - mg.b;
+  const rows = Object.entries(dados.ufs).filter(([k]) => k !== "br").map(([k, r]) => ({ k, r, v:val(r) }))
+    .sort((a, b) => b.v - a.v || a.k.localeCompare(b.k));
+  // eixo vertical fixo na escala do resultado final: as barras crescem em vez de o eixo se mexer durante o replay
+  const ref = Object.entries((final ?? dados).ufs).filter(([k]) => k !== "br").map(([, r]) => val(r));
+  const y = d3.scaleLinear().domain([0, Math.max(...ref, ...rows.map(d => d.v), 1e-9)]).nice().range([ih, 0]);
+  const x = d3.scaleBand(rows.map(d => d.k), [0, iw]).padding(0.16);
+  const box = d3.select("#barbox");
+  let svg = box.select("svg");
+  if (svg.empty()) {
+    svg = box.append("svg").attr("viewBox", `0 0 ${W} ${H}`).attr("role", "img").attr("aria-label", "Gráfico de barras por estado");
+    const g = svg.append("g").attr("transform", `translate(${mg.l},${mg.t})`);
+    g.append("g").attr("class", "grid"); g.append("g").attr("class", "bars");
+  }
+  const g = svg.select("g"), t = d3.transition().duration(matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 280).ease(d3.easeCubicOut);
+  const fmtY = ehVoto ? compacto : v => Math.round(v * 1000) / 10 + "%";
+  g.select(".grid").selectAll("g").data(y.ticks(5)).join(e => { const t = e.append("g"); t.append("line").attr("class", "gr"); t.append("text").attr("class", "ax").attr("text-anchor", "end").attr("x", -8).attr("dy", "0.32em"); return t; })
+    .attr("transform", d => `translate(0,${y(d)})`).call(a => a.select("line").attr("x2", iw)).call(a => a.select("text").text(fmtY));
+  const cor1 = ehVoto ? css("--cand1") : M === "apuracao" ? css("--prog") : METRICAS[M][1], cor2 = css("--cand2");
+  const gb = g.select(".bars").selectAll("g.b").data(rows, d => d.k).join(e => {
+    const b = e.append("g").attr("class", "b").attr("transform", d => `translate(${x(d.k)},0)`);
+    b.append("rect").attr("class", "r1").attr("y", ih).attr("height", 0); b.append("rect").attr("class", "r2").attr("y", ih).attr("height", 0);
+    b.append("text").attr("class", "vl").attr("text-anchor", "middle").attr("y", ih - 4);
+    b.append("text").attr("class", "xl").attr("text-anchor", "middle").attr("y", ih + 18);
+    return b; });
+  gb.attr("data-k", d => d.k).on("mousemove", (ev, d) => tip(ev, tipHtml(d.k.toUpperCase(), d.r))).on("mouseleave", () => tip(null, null))
+    .on("click", (ev, d) => { st.pin = st.pin?.k === d.k ? null : { k:d.k, nome:d.k.toUpperCase() }; render(); });
+  gb.transition(t).attr("transform", d => `translate(${x(d.k)},0)`);
+  gb.select(".r1").attr("x", 0).attr("width", x.bandwidth()).attr("fill", cor1).classed("sel", d => st.pin?.k === d.k)
+    .transition(t).attr("y", d => y(ehVoto ? d.r.v1 : d.v)).attr("height", d => ih - y(ehVoto ? d.r.v1 : d.v));
+  gb.select(".r2").attr("x", 0).attr("width", x.bandwidth()).attr("fill", cor2).classed("sel", d => st.pin?.k === d.k)
+    .transition(t).attr("y", d => ehVoto ? y(d.v) : ih).attr("height", d => ehVoto ? y(d.r.v1) - y(d.v) : 0);
+  gb.select(".vl").attr("x", x.bandwidth() / 2).text(d => d.v ? (ehVoto ? curto(d.v) : Math.round(d.v * 1000) / 10 + "%") : "")
+    .transition(t).attr("y", d => y(d.v) - 4);
+  gb.select(".xl").attr("x", x.bandwidth() / 2).text(d => d.k === "zz" ? "EXT" : d.k.toUpperCase());
+  document.getElementById("leg").innerHTML = ehVoto
+    ? `<i style="background:linear-gradient(90deg,var(--cand1) 50%,var(--cand2) 50%)"></i><span>cada barra = votos válidos apurados (${N1()} embaixo, ${N2()} em cima), do estado com mais votos para o com menos · clique numa barra para ver os detalhes</span>`
+    : `<i style="background:${cor1}"></i><span>${M === "apuracao" ? "% de urnas apuradas" : METRICAS[M][0] + " (% " + (M === "abst" ? "dos eleitores das seções apuradas" : "dos votos apurados") + ")"} por estado, em ordem decrescente · eixo fixo na escala do resultado final</span>`;
+}
+function seg(id, opts, key) {
+  const el = document.getElementById(id); el.innerHTML = "";
+  opts.forEach(([val, rotulo]) => { const b = document.createElement("button"); b.textContent = rotulo; b.className = st[key] === val ? "on" : "";
+    b.onclick = () => { st[key] = val; if (key === "nivel" && val !== "uf") { st.uf = null; st.pin = null; } render(); }; el.appendChild(b); });
+}
+function render() {
+  if (!dados) return;
+  calcEscala();
+  seg("segVista", [["mapa","Mapa"],["barras","Barras por estado"]], "vista");
+  seg("segNivel", [["estados","Estados"],["municipios","Municípios do Brasil"]], "nivel");
+  if (st.nivel === "uf") document.querySelectorAll("#segNivel button").forEach(b => b.className = "");
+  seg("segMetrica", [["voto","Votos válidos"],["apuracao","Urnas apuradas"],["abst","Abstenção"],["brancos","Brancos"],["nulos","Nulos"]], "metrica");
+  { const el = document.getElementById("segTab"); el.innerHTML = "";
+    [["votos","Votos"],["outros","Abstenção, brancos e nulos"]].forEach(([v,t]) => { const b = document.createElement("button"); b.textContent = t; b.className = st.tab === v ? "on" : ""; b.onclick = () => { st.tab = v; tabela(); document.querySelectorAll("#segTab button").forEach(x => x.className = x.textContent === t ? "on" : ""); }; el.appendChild(b); }); }
+  const barras = st.vista === "barras";
+  document.getElementById("segNivel").hidden = barras; document.getElementById("svgwrap").hidden = barras; document.getElementById("barbox").hidden = !barras;
+  voltar.hidden = barras || st.nivel !== "uf";
+  titulo.textContent = barras ? "Estados do maior para o menor valor" : st.nivel === "uf" ? st.uf.toUpperCase() + " por município" : "";
+  detalhe(); tabela(); barras ? desenharBarras() : desenhar();
+}
+voltar.onclick = () => { st.nivel = "estados"; st.uf = null; st.pin = null; render(); };
+
+const ELEICOES = [
+  { id:"2022-t1", rotulo:"2022 · 1º turno", replay:true }, { id:"2022-t2", rotulo:"2022 · 2º turno", replay:true },
+  { id:"2026-t1", rotulo:"2026 · 1º turno", replay:true }, { id:"live", rotulo:"2026 · 2º turno", live:true },
+];
+st.eleicao ??= "live";
+const urlDe = e => e === "live" ? "../dados/latest.json" : `../dados/hist/${e}.json`;
+const cacheHist = {};
+async function buscar(e) {
+  if (e !== "live" && cacheHist[e]) return cacheHist[e];
+  const d = await (await fetch(urlDe(e), {cache: "no-store"})).json();
+  if (e !== "live") cacheHist[e] = d;
+  return d;
+}
+/* ---------- replay da apuração (eleições passadas com boletim de urna por horário) ---------- */
+let final = null, replay = null;
+const fmtHora = t => { const [d, h] = t.split(" "); return `${d.slice(8)}/${d.slice(5,7)} ${h}`; };
+async function prepararReplay() {
+  replay = null; tempo.classList.remove("on");
+  if (!ELEICOES.find(e => e.id === st.eleicao)?.replay) return;
+  try {
+    replay = cacheReplay[st.eleicao] ??= await (await fetch(`../dados/hist/${st.eleicao}-replay.json`)).json();
+    if (!replay.frames?.length) { replay = null; return; }
+    tempo.classList.add("on"); desenharSpark();
+  } catch { replay = null; }   // sem arquivo de replay: segue só com o resultado final
+}
+const cacheReplay = {};
+// último acumulado do município até o quadro f (entradas só existem nos quadros em que ele mudou)
+function noQuadro(e, f) {
+  let lo = 0, hi = e.length - 1, r = -1;
+  while (lo <= hi) { const m = (lo + hi) >> 1; if (e[m][0] <= f) { r = m; lo = m + 1; } else hi = m - 1; }
+  return r < 0 ? null : e[r];
+}
+function estadoNoQuadro(f) {
+  const mun = {}, ufs = {}, soma = () => ({ ts:0, st:0, eleitores:0, v1:0, v2:0, validos:0, total:0, comp:0, abst:0, brancos:0, nulos:0 });
+  const fr = replay.frames[f], dg = fmtHora(fr.t), ultimo = f === replay.frames.length - 1;
+  for (const [k, m] of Object.entries(replay.mun)) {
+    const e = noQuadro(m.e, f), nm = final.mun[k]?.nm ?? k;
+    const r = { ts:m.ts, st:e ? e[1] : 0, eleitores:0, comp:e ? e[2] : 0, abst:e ? e[3] : 0, v1:e ? e[4] : 0, v2:e ? e[5] : 0,
+                brancos:e ? e[6] : 0, nulos:e ? e[7] : 0, uf:m.u, nm, dg, hg:"", tf: ultimo };
+    r.total = r.comp; r.validos = r.v1 + r.v2;
+    if (k !== "zz") mun[k] = r;
+    for (const key of [m.u, "br"]) { const a = ufs[key] ??= soma();
+      for (const c of ["ts","st","comp","abst","v1","v2","brancos","nulos","total","validos"]) a[c] += r[c]; }
+  }
+  for (const a of Object.values(ufs)) Object.assign(a, { dg, hg:"", tf: ultimo });
+  return { ufs, mun, cands: final.cands, eleicao: final.eleicao, gerado: dg };
+}
+const quadroPorPct = p => { const F = replay.frames; let lo = 0, hi = F.length - 1;
+  while (lo < hi) { const m = (lo + hi) >> 1; if (F[m].p < p) lo = m + 1; else hi = m; }
+  return lo > 0 && p - F[lo - 1].p < F[lo].p - p ? lo - 1 : lo; };   // quadro mais próximo da %
+function irParaQuadro(f, doSlider) {
+  const F = replay.frames; f = Math.max(0, Math.min(F.length - 1, f)); st.frame = f; st.pct = F[f].p;   // lembra a % para comparar com outras eleições
+  if (!doSlider) tslider.value = Math.round(F[f].p * 1000);
+  dados = f === F.length - 1 ? final : estadoNoQuadro(f);
+  tlabel.innerHTML = `<b>${fmtHora(F[f].t)}</b> · ${pc(F[f].p)} das urnas apuradas${f === F.length - 1 ? " · resultado final" : ""}`;
+  document.getElementById("meta").textContent = `${rotuloEleicao()} · replay da apuração (boletins por horário de chegada)`;
+  marcarSpark(); render();
+}
+tslider.oninput = () => { pausar(); irParaQuadro(quadroPorPct(tslider.value / 1000), true); };
+tfinal.onclick = () => { pausar(); irParaQuadro(replay.frames.length - 1); };
+let timer = null;
+function pausar() { clearInterval(timer); timer = null; tplay.textContent = "▶"; }
+tplay.onclick = () => {
+  if (timer) return pausar();
+  if (st.frame == null || st.frame >= replay.frames.length - 1) irParaQuadro(0);
+  tplay.textContent = "⏸";
+  timer = setInterval(() => { if (st.frame >= replay.frames.length - 1) return pausar(); irParaQuadro(st.frame + 1); }, 350);
+};
+document.addEventListener("keydown", ev => { if (ev.code === "Space" && replay && !ev.target.closest("button,input")) { ev.preventDefault(); tplay.click(); } });
+// minigráfico: % apurada ao longo do tempo (mostra o ritmo da noite) + marcador do quadro atual
+function desenharSpark() {
+  const F = replay.frames, n = F.length - 1;
+  const pts = F.map((q, i) => `${(i / n) * 600},${34 - q.p * 32}`);
+  document.getElementById("tspark").innerHTML = `<path d="M0,34 L${pts.join(" L")} L600,34 Z" fill="${css("--prog")}" opacity=".35"/><line id="tmark" y1="0" y2="34" stroke="${css("--fg")}" stroke-width="1.5" vector-effect="non-scaling-stroke"/>`;
+  marcarSpark();
+}
+function marcarSpark() { const m = document.getElementById("tmark"); if (!m || !replay) return;
+  const x = ((st.frame ?? replay.frames.length - 1) / (replay.frames.length - 1)) * 600; m.setAttribute("x1", x); m.setAttribute("x2", x); }
+function desenharLinha() {
+  const el = document.getElementById("linha"); el.innerHTML = "";
+  ELEICOES.forEach(e => { const b = document.createElement("button"); b.textContent = e.rotulo + (e.live ? " · apurando" : "");
+    b.className = (st.eleicao === e.id ? "on " : "") + (e.live ? "live" : ""); b.onclick = () => trocar(e.id); el.appendChild(b); });
+}
+async function trocar(e) {
+  if (e === st.eleicao && dados) return;
+  try { const d = await buscar(e); st.eleicao = e; final = d; dados = d; st.frame = null; await prepararReplay(); aplicar(); }
+  catch { document.getElementById("meta").textContent = e === "live" ? "dados ao vivo indisponíveis: rode o coletor (python3 apuracao.py) localmente" : "dados desta eleição indisponíveis (rode historico2022.py / --arquivar)"; }
+}
+const rotuloEleicao = () => ELEICOES.find(e => e.id === st.eleicao)?.rotulo ?? dados.eleicao;
+function aplicar() {
+  document.getElementById("fonte").textContent = st.eleicao === "live" ? `coletado em ${dados.gerado}` : `${rotuloEleicao()}: resultado final${replay ? " e boletins de urna por horário de chegada" : ""}`;
+  document.getElementById("n1").textContent = dados.cands?.v1 ?? "Lula";
+  document.getElementById("n2").textContent = dados.cands?.v2 ?? "Flávio Bolsonaro";
+  document.getElementById("meta").textContent = st.eleicao === "live"
+    ? `${dados.eleicao} · coletado ${dados.gerado} · atualiza sozinho a cada 30 s`
+    : `${rotuloEleicao()} · resultado final (arquivo)`;
+  desenharLinha();
+  if (replay && st.frame0 != null && !aplicar.feito) { aplicar.feito = true; return irParaQuadro(+st.frame0); }
+  aplicar.feito = true;
+  if (replay && tlockbox.checked && st.pct != null && st.pct < 1 && st.frame == null) return irParaQuadro(quadroPorPct(st.pct));   // mesma % da eleição anterior
+  if (replay) { tlabel.innerHTML = `<b>${fmtHora(replay.frames.at(-1).t)}</b> · ${pc(1)} das urnas apuradas · resultado final`; tslider.value = 1000; marcarSpark(); }
+  render();
+}
+async function carregar() {
+  try { dados = final = await buscar(st.eleicao); st.frame = null; await prepararReplay(); aplicar(); }
+  catch (e) {
+    // versão publicada (GitHub Pages) não tem coletor: sem dados ao vivo, abre a eleição mais recente com resultado arquivado
+    if (st.eleicao === "live" && !new URLSearchParams(location.hash.slice(1)).has("eleicao")) {
+      st.eleicao = ELEICOES.filter(x => !x.live).at(-1).id; return carregar();
+    }
+    document.getElementById("meta").textContent = "aguardando o coletor gerar dados/latest.json…";
+  }
+}
+document.addEventListener("keydown", ev => {   // ← / → andam na linha do tempo
+  if (!/^Arrow(Left|Right)$/.test(ev.key) || ev.target.closest("input,select,textarea")) return;
+  const i = ELEICOES.findIndex(e => e.id === st.eleicao) + (ev.key === "ArrowRight" ? 1 : -1);
+  if (ELEICOES[i]) trocar(ELEICOES[i].id);
+});
+rotuloTema();
+document.getElementById("tema").onclick = () => {
+  const novo = escuroAgora() ? "light" : "dark";
+  document.documentElement.dataset.theme = novo; try { localStorage.setItem("tema", novo); } catch {}
+  rotuloTema(); if (dados) { render(); if (replay) desenharSpark(); }   // as cores do mapa são lidas dos tokens ao desenhar
+};
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { rotuloTema(); if (dados) { render(); if (replay) desenharSpark(); } });
+desenharLinha();
+carregar(); setInterval(() => { if (st.eleicao === "live") carregar(); }, 30000);   // só a eleição ao vivo atualiza sozinha
+ELEICOES.filter(e => !e.live).forEach(e => buscar(e.id).catch(() => {}));   // pré-carrega para a troca ser instantânea
+</script>
+</body>
+</html>

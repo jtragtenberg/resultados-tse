@@ -1,0 +1,6 @@
+.DS_Store
+__pycache__/
+dados/latest.json
+dados/latest.json.tmp
+dados/apuracao.db
+dados/fonte*/
