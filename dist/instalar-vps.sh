@@ -122,8 +122,8 @@ else
   [ "$PUBLICO" = 1 ] || echo "AVISO: o serviço escuta só em 127.0.0.1; use --publico, --tunel ou --dominio"
 fi
 
-say "5/5 Esperando o 1º ciclo de coleta (a 1ª passada baixa ~5.600 arquivos devagar, para o TSE não bloquear: ~3 a 5 min)"
-for i in $(seq 1 200); do
+say "5/5 Esperando o 1º ciclo de coleta (a 1ª passada baixa ~5.600 arquivos devagar, para o TSE não bloquear: ~8 a 10 min)"
+for i in $(seq 1 450); do
   C=$(curl -fsS "http://127.0.0.1:$PORTA/status" 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin)["ciclos"])' 2>/dev/null || echo 0)
   [ "${C:-0}" -ge 1 ] && break; sleep 2
 done
@@ -144,7 +144,7 @@ Parar/iniciar: systemctl stop|start resultados-tse
 EOF
 exit 0
 __PAYLOAD__
-H4sIAJEZ2WoC/+1923IjR5aYnvEVOTXRwaruYuFCsrsFDaSluqlVe9jNdpOt2DWNwBaABFgiUAXV
+H4sIACYc2WoC/+1923IjR5aYnvEVOTXRwaruYuFCsrsFDaSluqlVe9jNdpOt2DWNwBaABFgiUAXV
 hWI3DYcdfvAP+AcU+zAxG6GnCYcj5nH4J/4Sn0tmVhZQINmj0drhRUnRAKqyMk+ePHnueRg0g+bf
 vQ2vv5XhWKaf/SpXi69Nn63W3n75He+3W5125zNx/dm/wlVkeZjC8J/927w6z8U8j+ay1372eedp
 u7P//FnwtPN0//nzTuOz7fX//RUuijQchUmw+PCrjYGb+tnBwYb9f7D3rNX5rH3Qefq0097vtGn/

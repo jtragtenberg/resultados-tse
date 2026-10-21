@@ -8,7 +8,7 @@ Oi Hermes! Preciso que você instale um coletor de apuração das eleições nes
 2) Teste primeiro com o 1º turno, que já tem votos (assim vemos dados de verdade):
    sudo bash instalar-vps.sh --tunel --eleicao 6257
    (se eu já tiver um domínio apontado para este VPS, use --dominio meu.dominio.com no lugar de --tunel)
-   Ele leva uns 3 a 5 minutos na primeira passada (baixa ~5.600 arquivos devagar de propósito, porque o TSE bloqueia com erro 429 se for rápido demais).
+   Ele leva uns 8 a 10 minutos na primeira passada (pode parecer parado) (baixa ~5.600 arquivos devagar de propósito, porque o TSE bloqueia com erro 429 se for rápido demais).
 
 3) Ao final ele imprime "PRONTO" com a URL dos dados. Me mande:
    - a URL pública (termina em /latest.json) e o link "Abra o site com os dados deste servidor";
