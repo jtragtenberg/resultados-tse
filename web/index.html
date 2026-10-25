@@ -153,6 +153,15 @@ const opac = r => st.metrica === "voto" && r && r.st ? 0.35 + 0.65*pctApur(r) : 
 const tipEl = document.getElementById("tip");
 function tip(ev, html) { tipEl.style.display = html ? "block" : "none"; if (!html) return;
   tipEl.innerHTML = html; tipEl.style.left = Math.min(ev.clientX+12, innerWidth-230)+"px"; tipEl.style.top = (ev.clientY+12)+"px"; }
+/* No celular não existe "mouseleave": o card do tooltip ficaria preso. Tocar fora de uma região (mapa ou barra) o esconde,
+   e tocar num espaço vazio do mapa também solta a seleção. */
+const REGIAO = "#svgbox path, #barbox .b";
+document.addEventListener("pointerdown", ev => { if (!ev.target.closest(REGIAO)) tip(null, null); }, true);
+addEventListener("scroll", () => tip(null, null), { passive:true });
+document.addEventListener("click", ev => {
+  if (!st.pin || ev.target.closest(`${REGIAO}, #detalhe, #tab, #tempo, #linha, header, footer, button, input, label, a, .seg`)) return;
+  st.pin = null; render();   // espaço vazio (fundo do mapa, margens, fora dos cards)
+});
 function blocoVotos(r, grande) {
   if (!r) return "<span class='m'>sem dados</span>";
   const [l,f] = partes(r);
@@ -349,6 +358,7 @@ function seg(id, opts, key) {
 }
 function render() {
   if (!dados) return;
+  tip(null, null);   // um card de tooltip antigo não deve sobreviver a uma nova renderização
   calcEscala();
   seg("segVista", [["mapa","Mapa"],["barras","Barras por estado"]], "vista");
   seg("segNivel", [["estados","Estados"],["municipios","Municípios do Brasil"]], "nivel");
