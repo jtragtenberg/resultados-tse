@@ -34,7 +34,7 @@ def main():
     ap.add_argument("--url", default="http://127.0.0.1:8000")
     ap.add_argument("--eleicao", default="6258")
     ap.add_argument("--json", action="store_true")
-    ap.add_argument("--max-idade", type=int, default=180, help="segundos sem dado novo até virar ATENÇÃO")
+    ap.add_argument("--max-idade", type=int, default=240, help="segundos sem dado novo até virar ATENÇÃO")
     a = ap.parse_args()
     url = a.url.rstrip("/")
     linhas, res = [], {"checagens": []}

@@ -11,7 +11,7 @@
 #   bash instalar-vps.sh --so-extrair /tmp/x          # só extrai os arquivos (teste local, sem systemd)
 set -euo pipefail
 
-ELEICAO=6258; PORTA=8000; INTERVALO=30; DOMINIO=""; TUNEL=0; PUBLICO=0; DIR=/opt/resultados-tse; SO_EXTRAIR=""; DESINSTALAR=0
+ELEICAO=6258; PORTA=8000; INTERVALO=60; DOMINIO=""; TUNEL=0; PUBLICO=0; DIR=/opt/resultados-tse; SO_EXTRAIR=""; DESINSTALAR=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --eleicao) ELEICAO="$2"; shift 2;; --porta) PORTA="$2"; shift 2;; --intervalo) INTERVALO="$2"; shift 2;;

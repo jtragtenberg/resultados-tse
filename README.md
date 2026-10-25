@@ -42,7 +42,7 @@ python3 deploy/montar.py             # gera dist/instalar-vps.sh (coletor + veri
 sudo bash dist/instalar-vps.sh --tunel --eleicao 6258     # HTTPS temporário (Cloudflare) · ou --dominio apuracao.seudominio.com
 ```
 
-O instalador cria o serviço `resultados-tse` (systemd) e imprime a URL pública. Abra o site com `https://jtragtenberg.github.io/resultados-tse/?api=URL` (fica salvo no navegador) ou preencha `web/config.js`. O site lê `URL/latest.json` a cada 30 s e mostra "atualizado há N s".
+O instalador cria o serviço `resultados-tse` (systemd) e imprime a URL pública. Abra o site com `https://jtragtenberg.github.io/resultados-tse/?api=URL` (fica salvo no navegador) ou preencha `web/config.js`. O site lê `URL/latest.json` a cada 1 min e mostra "atualizado há N s".
 Para checar se está funcionando: `python3 verificar.py [--url URL]` (no VPS: `python3 -I /opt/resultados-tse/verificar.py`) ou `python3 apuracao.py --teste` (uma coleta curta, sem servidor). O texto para mandar ao Hermes está em `deploy/mensagem-hermes.txt`.
 
 **Limite do TSE:** requisições rápidas demais recebem erro 429 e bloqueiam o IP por vários minutos. O coletor limita a taxa (`--rps`, padrão 30), corta pela metade ao levar 429 e consulta só os municípios que ainda podem mudar.

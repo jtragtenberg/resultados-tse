@@ -464,9 +464,9 @@ function metaTexto() {   // no ao vivo, mostra há quanto tempo o coletor gerou 
   const m = document.getElementById("meta");
   if (st.eleicao !== "live") { m.textContent = `${rotuloEleicao()} · resultado final${replay ? " · use o slider para rever a apuração" : " (arquivo)"}`; return; }
   const idade = dados?.ts_epoch ? Math.max(0, Math.round(Date.now() / 1000 - dados.ts_epoch)) : null;
-  const txt = idade == null ? `coletado ${dados.gerado}` : idade < 90 ? `atualizado há ${idade} s` : `SEM DADO NOVO HÁ ${Math.round(idade / 60)} MIN`;
-  m.textContent = `${dados.eleicao} · ${txt} · confere a cada 30 s${API ? " · fonte: servidor remoto" : ""}`;
-  m.style.fontWeight = idade != null && idade >= 120 ? "700" : "";
+  const txt = idade == null ? `coletado ${dados.gerado}` : idade < 150 ? `atualizado há ${idade} s` : `SEM DADO NOVO HÁ ${Math.round(idade / 60)} MIN`;
+  m.textContent = `${dados.eleicao} · ${txt} · confere a cada 1 min${API ? " · fonte: servidor remoto" : ""}`;
+  m.style.fontWeight = idade != null && idade >= 150 ? "700" : "";
 }
 setInterval(() => { if (st.eleicao === "live" && dados) metaTexto(); }, 1000);
 const rotuloEleicao = () => ELEICOES.find(e => e.id === st.eleicao)?.rotulo ?? dados.eleicao;
@@ -506,7 +506,7 @@ document.getElementById("tema").onclick = () => {
 };
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { rotuloTema(); if (dados) { render(); if (replay) desenharSpark(); } });
 desenharLinha();
-carregar(); setInterval(() => { if (st.eleicao === "live") carregar(); }, 30000);   // só a eleição ao vivo atualiza sozinha
+carregar(); setInterval(() => { if (st.eleicao === "live") carregar(); }, 60000);   // só a eleição ao vivo atualiza sozinha (1 min)
 ELEICOES.filter(e => !e.live).forEach(e => buscar(e.id).catch(() => {}));   // pré-carrega para a troca ser instantânea
 </script>
 </body>
