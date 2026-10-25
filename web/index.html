@@ -37,6 +37,7 @@
   button { font:inherit; padding:4px 10px; border:1px solid var(--line); background:var(--card); color:var(--fg); border-radius:6px; cursor:pointer }
   #svgbox svg { width:100%; height:auto; max-height:76vh; display:block }
   path { stroke:var(--bg); stroke-width:.4; vector-effect:non-scaling-stroke } path.uf { cursor:pointer; stroke-width:1 }
+  path.ext { stroke:var(--mut); stroke-dasharray:4 3; stroke-width:1.2; cursor:pointer } .extl { fill:var(--fg); font-size:11px; font-weight:500; pointer-events:none; paint-order:stroke; stroke:var(--card); stroke-width:3px }
   path.pin { stroke:var(--fg); stroke-width:2 }
   #svgbox svg { cursor:grab; touch-action:none } #svgbox svg:active { cursor:grabbing }
   #zoom { position:absolute; right:8px; top:8px; display:flex; flex-direction:column; gap:4px; z-index:2 } #zoom button { width:30px; padding:4px 0; font-size:16px }
@@ -173,32 +174,53 @@ function rebobinar(fc) {
 }
 async function geo(url) { if (!geos[url]) { loading.hidden = false; try { geos[url] = rebobinar(await (await fetch(url)).json()); } finally { loading.hidden = true; } } return geos[url]; }
 
+// Ilha fictícia "Exterior" no Atlântico, a leste do Nordeste: representa todos os votos de brasileiros no exterior
+const ILHA = { cx:-27.5, cy:-9 };
+function ilhaExterior() {
+  const anel = [];
+  for (let i = 0; i < 18; i++) { const a = (i / 18) * 2 * Math.PI, r = 2.3 + 0.4 * Math.sin(3 * a + 1) + 0.25 * Math.cos(5 * a);
+    anel.push([ILHA.cx + 1.25 * r * Math.cos(a), ILHA.cy + r * Math.sin(a)]); }
+  anel.push(anel[0]);
+  const f = { type:"Feature", properties:{ ext:true, codarea:"zz" }, geometry:{ type:"Polygon", coordinates:[anel] } };
+  if (d3.geoArea(f) > 2 * Math.PI) anel.reverse();   // o d3 espera o sentido contrário ao do GeoJSON padrão
+  return f;
+}
 async function desenhar() {
   const q = "formato=application/vnd.geo+json&qualidade=minima";
   let url, chave, registro, nome, pinKey;
   if (st.nivel === "estados") { url = `${IBGE}/paises/BR?${q}&intrarregiao=UF`; chave = f => UF_DE_COD[+f.properties.codarea]; registro = f => dados.ufs[chave(f)]; nome = f => chave(f).toUpperCase(); }
   else if (st.nivel === "municipios") { url = `${IBGE}/paises/BR?${q}&intrarregiao=municipio`; chave = f => f.properties.codarea; registro = f => dados.mun[chave(f)]; nome = f => { const r = registro(f); return r ? `${r.nm} – ${r.uf.toUpperCase()}` : chave(f); }; }
   else { url = `${IBGE}/estados/${COD[st.uf]}?${q}&intrarregiao=municipio`; chave = f => f.properties.codarea; registro = f => dados.mun[chave(f)]; nome = f => registro(f)?.nm ?? chave(f); }
-  const fc = await geo(url);
+  const fc0 = await geo(url);
+  const comIlha = st.nivel !== "uf", ext = f => f.properties.ext;
+  const chave0 = chave, reg0 = registro, nome0 = nome;
+  chave = f => ext(f) ? "zz" : chave0(f); registro = f => ext(f) ? dados.ufs.zz : reg0(f); nome = f => ext(f) ? "Exterior (votos no exterior)" : nome0(f);
+  const fc = { type:"FeatureCollection", features: comIlha ? [...fc0.features, ilhaExterior()] : fc0.features };
   const W = 800, H = 720, box = d3.select("#svgbox"); box.selectAll("*").remove();
   const svg = box.append("svg").attr("viewBox", `0 0 ${W} ${H}`);
-  const path = d3.geoPath(d3.geoMercator().fitSize([W,H], fc));
+  const proj = d3.geoMercator().fitSize([W,H], fc), path = d3.geoPath(proj);
   const g = svg.append("g");
   const nz = st.nivel + ":" + st.uf;
   if (st.zk !== nz) { st.zk = nz; st.zt = d3.zoomIdentity; }   // trocou de nível: zoom volta ao início
   zoom = d3.zoom().scaleExtent([1, 60]).translateExtent([[-W*0.1,-H*0.1],[W*1.1,H*1.1]]).on("zoom", ev => { st.zt = ev.transform; g.attr("transform", ev.transform); });
   svg.call(zoom).call(zoom.transform, st.zt).on("dblclick.zoom", null);
-  g.selectAll("path").data(fc.features).join("path").attr("d", path).attr("class", st.nivel === "estados" ? "uf" : "")
+  g.selectAll("path").data(fc.features).join("path").attr("d", path).attr("class", f => ext(f) ? "ext" : st.nivel === "estados" ? "uf" : "")
     .attr("fill", f => cor(registro(f))).attr("fill-opacity", f => opac(registro(f)))
     .classed("pin", f => st.pin && st.pin.k === chave(f))
     .on("mousemove", (ev,f) => { tip(ev, tipHtml(nome(f), registro(f))); })
     .on("mouseleave", () => tip(null,null))
     .on("click", (ev,f) => {
-      if (st.nivel === "estados") { st.uf = chave(f); st.nivel = "uf"; st.pin = null; }
+      if (ext(f)) st.pin = st.pin?.k === "zz" ? null : { k:"zz", nome:"Exterior" };
+      else if (st.nivel === "estados") { st.uf = chave(f); st.nivel = "uf"; st.pin = null; }
       else st.pin = { k: chave(f), nome: nome(f), r: registro(f) };
       render();
     });
+  if (comIlha) {
+    const [x, y] = proj([ILHA.cx, ILHA.cy]);
+    g.append("text").attr("class", "extl").attr("x", x).attr("y", y).attr("text-anchor", "middle").attr("dy", "0.35em").text("Exterior");
+  }
   legenda();
+  if (comIlha) document.getElementById("leg").insertAdjacentHTML("beforeend", `<span>· a ilha "Exterior" é fictícia: representa todos os votos de brasileiros no exterior</span>`);
 }
 let zoom;
 const svgSel = () => d3.select("#svgbox svg");
@@ -243,7 +265,7 @@ function tabela() {
   const cel = (k, r) => k === "ap" ? pc(pctApur(r)) : r.st ? pc(VAL[k](r)) : "–";
   d3.select("#tab tbody").selectAll("tr").data(rows, d => d[0]).join("tr").order()
     .classed("sel", d => d[0] === st.uf)
-    .on("click", (ev,d) => { if (d[0] === "zz") return; st.uf = d[0]; st.nivel = "uf"; st.pin = null; render(); })
+    .on("click", (ev,d) => { if (d[0] === "zz") { st.pin = st.pin?.k === "zz" ? null : { k:"zz", nome:"Exterior" }; return render(); } st.uf = d[0]; st.nivel = "uf"; st.pin = null; render(); })
     .html(d => `<td>${d[0].toUpperCase()}</td>` + cols.slice(1).map(([k]) => `<td>${cel(k, d[1])}</td>`).join(""));
 }
 
