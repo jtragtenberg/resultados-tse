@@ -237,10 +237,13 @@ const DUR = () => matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 2
 zin.onclick = () => svgSel().transition().duration(DUR()).call(zoom.scaleBy, 1.8);
 zout.onclick = () => svgSel().transition().duration(DUR()).call(zoom.scaleBy, 1/1.8);
 zreset.onclick = () => svgSel().transition().duration(DUR()).call(zoom.transform, d3.zoomIdentity);
+// replay feito a partir do coletor (e não dos boletins de urna): a abstenção só pode ser estimada
+const notaAbst = () => replay?.abst_estimada && st.metrica === "abst" && st.frame != null && st.frame < replay.frames.length - 1
+  ? ` · <b>abstenção estimada</b> neste replay (eleitores × seções apuradas − comparecimento)` : "";
 function legenda() {
   const M = METRICAS[st.metrica];
   document.getElementById("leg").innerHTML = M
-    ? `<i style="background:linear-gradient(90deg,#eee,${M[1]})"></i><span>${M[0]}: 0% → ${pc(escala[st.metrica])} (ou mais) · cinza = nenhuma urna apurada · % sobre ${st.metrica === "abst" ? "eleitores nas seções apuradas" : "votos totais apurados"}</span>`
+    ? `<i style="background:linear-gradient(90deg,#eee,${M[1]})"></i><span>${M[0]}: 0% → ${pc(escala[st.metrica])} (ou mais) · cinza = nenhuma urna apurada · % sobre ${st.metrica === "abst" ? "eleitores nas seções apuradas" : "votos totais apurados"}${notaAbst()}</span>`
     : st.metrica === "apuracao"
     ? `<i style="background:linear-gradient(90deg,#e4efec,var(--prog))"></i><span>0% → 100% das urnas apuradas · cinza = nenhuma urna apurada</span>`
     : `<i style="background:linear-gradient(90deg,var(--cand1),var(--cand2))"></i><span>vermelho = ${N1()} na frente · azul = ${N2()} na frente · roxo = disputa equilibrada · quanto mais puro o tom, maior a vantagem · transparente = poucas urnas apuradas · cinza = nenhuma urna apurada</span>`;
@@ -349,7 +352,7 @@ function desenharBarras() {
     : `% dos votos válidos que ${nome} tem em cada estado (sobre ${N1()} + ${N2()})`;
   else txt = M === "apuracao" ? (cfg.abs ? "votos apurados (comparecimento já contado) em cada estado" : "% de urnas apuradas")
     : `${METRICAS[M][0]} ${cfg.abs ? "(quantidade)" : "(% " + (M === "abst" ? "dos eleitores das seções apuradas" : "dos votos apurados") + ")"}`;
-  document.getElementById("leg").innerHTML = `<i style="background:${cfg.empilhado ? "linear-gradient(90deg,var(--cand1) 50%,var(--cand2) 50%)" : cor1}"></i><span>${txt}, do estado com mais para o com menos · eixo fixo na escala do resultado final${temFinal ? " · contorno tracejado = total ao fim da apuração" : ""} · clique numa barra para ver os detalhes</span>`;
+  document.getElementById("leg").innerHTML = `<i style="background:${cfg.empilhado ? "linear-gradient(90deg,var(--cand1) 50%,var(--cand2) 50%)" : cor1}"></i><span>${txt}, do estado com mais para o com menos · eixo fixo na escala do resultado final${temFinal ? " · contorno tracejado = total ao fim da apuração" : ""}${notaAbst()} · clique numa barra para ver os detalhes</span>`;
 }
 function seg(id, opts, key) {
   const el = document.getElementById(id); el.innerHTML = "";
@@ -460,7 +463,7 @@ function irParaQuadro(f, doSlider) {
   if (!doSlider) tslider.value = Math.round(F[f].p * 1000);
   dados = f === F.length - 1 ? final : estadoNoQuadro(f);
   tlabel.innerHTML = `<b>${fmtHora(F[f].t)}</b> · ${pc(F[f].p)} das urnas apuradas${f === F.length - 1 ? " · resultado final" : ""}`;
-  document.getElementById("meta").textContent = `${rotuloEleicao()} · replay da apuração (boletins por horário de chegada)`;
+  document.getElementById("meta").textContent = `${rotuloEleicao()} · replay da apuração (${replay.fonte === "coletor" ? "arquivos do TSE, no horário em que foram gerados" : "boletins de urna, no horário de chegada"})`;
   marcarSpark(); render();
 }
 tslider.oninput = () => { pausar(); irParaQuadro(quadroPorPct(tslider.value / 1000), true); };
@@ -504,7 +507,7 @@ function metaTexto() {   // no ao vivo, mostra há quanto tempo o coletor gerou 
 setInterval(() => { if (st.eleicao === "live" && dados) metaTexto(); }, 1000);
 const rotuloEleicao = () => ELEICOES.find(e => e.id === st.eleicao)?.rotulo ?? dados.eleicao;
 function aplicar() {
-  document.getElementById("fonte").textContent = st.eleicao === "live" ? `coletado em ${dados.gerado}` : `${rotuloEleicao()}: resultado final${replay ? " e boletins de urna por horário de chegada" : ""}`;
+  document.getElementById("fonte").textContent = st.eleicao === "live" ? `coletado em ${dados.gerado}` : `${rotuloEleicao()}: resultado final${replay ? (replay.fonte === "coletor" ? " e histórico do coletor" : " e boletins de urna por horário de chegada") : ""}`;
   document.getElementById("n1").textContent = dados.cands?.v1 ?? "Lula";
   document.getElementById("n2").textContent = dados.cands?.v2 ?? "Flávio Bolsonaro";
   metaTexto();
