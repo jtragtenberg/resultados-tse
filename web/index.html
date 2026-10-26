@@ -385,18 +385,19 @@ voltar.onclick = () => { st.nivel = "estados"; st.uf = null; st.pin = null; rend
 
 const ELEICOES = [
   { id:"2022-t1", rotulo:"2022 · 1º turno", replay:true }, { id:"2022-t2", rotulo:"2022 · 2º turno", replay:true },
-  { id:"2026-t1", rotulo:"2026 · 1º turno", replay:true }, { id:"live", rotulo:"2026 · 2º turno", live:true },
+  { id:"2026-t1", rotulo:"2026 · 1º turno", replay:true }, { id:"2026-t2", rotulo:"2026 · 2º turno", replay:true },
 ];
-st.eleicao ??= "live";
-/* Fonte dos dados ao vivo: ?api=URL (salva no navegador) > web/config.js > ../dados/latest.json (coletor local) */
+/* Fonte dos dados ao vivo (só numa eleição em andamento): ?api=URL > web/config.js. Vazia = sem botão "Ao vivo". */
 const API = (() => {
   const ok = u => { try { const x = new URL(u); return (x.protocol === "https:" || x.hostname === "localhost" || x.hostname === "127.0.0.1") ? x.origin + x.pathname.replace(/\/+$/, "") : ""; } catch { return ""; } };
+  try { localStorage.removeItem("api"); } catch {}   // versões antigas guardavam o endereço do VPS aqui
   const p = new URLSearchParams(location.search).get("api") ?? new URLSearchParams(location.hash.slice(1)).get("api");
-  try { if (p !== null) { p === "" ? localStorage.removeItem("api") : localStorage.setItem("api", ok(p)); } } catch {}
-  let salvo = ""; try { salvo = localStorage.getItem("api") || ""; } catch {}
-  return ok(p ?? "") || ok(salvo) || ok(window.API_AO_VIVO || "");
+  return ok(p ?? "") || ok(window.API_AO_VIVO || "");
 })();
 const urlDe = e => e === "live" ? (API ? `${API}/latest.json` : "../dados/latest.json") : `../dados/hist/${e}.json`;
+// "ao vivo" só existe se houver um coletor configurado (web/config.js ou ?api=): numa próxima eleição, basta rodar o coletor de novo
+if (API) ELEICOES.push({ id:"live", rotulo:"Ao vivo", live:true });
+st.eleicao ??= ELEICOES.at(-1).id === "live" ? "2026-t2" : ELEICOES.at(-1).id;
 // dados de uma API externa são tratados como não confiáveis: números viram números e textos são escapados antes de ir para o HTML
 const esc = x => String(x ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
 function sanear(d) {

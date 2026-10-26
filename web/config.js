@@ -1,4 +1,3 @@
-// Endereço do coletor no VPS (sem barra no fim). Vazio = usa dados/latest.json local (coletor rodando nesta máquina).
-// Também dá para abrir o site com ?api=https://seu-endereco (fica salvo no navegador; ?api= vazio limpa).
-// Atenção: o túnel gratuito da Cloudflare muda de endereço se reiniciar; nesse caso, atualize esta linha e dê push.
-window.API_AO_VIVO = "https://comic-identify-bigger-cooper.trycloudflare.com";
+// Endereço do coletor ao vivo (sem barra no fim). Vazio = sem "Ao vivo": o site mostra só eleições arquivadas, sem depender de nenhum servidor.
+// Numa próxima eleição: rode o coletor (python3 apuracao.py ou deploy/instalar-vps.sh) e preencha aqui ou abra o site com ?api=https://...
+window.API_AO_VIVO = "";

@@ -1,15 +1,15 @@
 # Resultados TSE — apuração em tempo real e replay
 
-Painel local para acompanhar a apuração do 2º turno de 2026 (Lula x Flávio Bolsonaro) e comparar com a apuração de eleições passadas na mesma porcentagem de urnas apuradas.
+Painel para ver como foi a apuração das eleições presidenciais de 2022 e 2026 (Lula x Bolsonaro) e comparar uma eleição com outra na mesma porcentagem de urnas apuradas. Também acompanha uma eleição em andamento, rodando o coletor.
 
 Projeto independente, sem vínculo com a Justiça Eleitoral. Dados: [resultados.tse.jus.br](https://resultados.tse.jus.br/) e [Portal de Dados Abertos do TSE](https://dadosabertos.tse.jus.br/).
 
-**Versão publicada:** https://jtragtenberg.github.io/resultados-tse/ (GitHub Pages). Sem coletor, mostra só as eleições arquivadas (2022 e 2026 1º turno) com replay; o modo ao vivo exige rodar o coletor localmente.
+**Versão publicada:** https://jtragtenberg.github.io/resultados-tse/ (GitHub Pages). É 100% estática: lê os arquivos de `dados/hist/` do próprio repositório e não depende de nenhum servidor. Eleições disponíveis: 2022 (1º e 2º turno) e 2026 (1º e 2º turno).
 
 ## Como usar
 
 ```bash
-python3 apuracao.py                 # coleta o 2º turno de 2026 (eleição 6258) e serve em http://localhost:8000/web/
+python3 apuracao.py                 # coleta uma eleição em andamento (padrão 6258) e serve em http://localhost:8000/web/
 python3 apuracao.py --eleicao 6257  # 1º turno de 2026
 python3 apuracao.py --simular       # dados fictícios, apuração aleatória por município
 ```
