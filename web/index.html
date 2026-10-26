@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap">
 <script src="config.js"></script>
+<script src="comparar.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
 <style>
   /* Tokens da identidade (ver design.md): --tse-* = interface; --cand1/--cand2/--prog/--nada = codificação de dados */
@@ -66,6 +67,10 @@
   #tlabel { min-width:230px; font-size:13px } #tlabel b { font-size:15px }
   #tspark { width:100%; height:34px; display:block } #tspark path { stroke:none; vector-effect:none }
   [hidden] { display:none !important }
+  #modos { display:flex; gap:8px; padding:0 16px 10px; flex-wrap:wrap } #modos button { font-weight:500 } #modos button.on { background:var(--fg); color:var(--bg) }
+  body.cmp #linha, body.cmp #tempo { display:none !important }
+  .dtab { width:100%; border-collapse:collapse; font-size:12px } .dtab th { color:var(--mut); font-weight:500; cursor:default; font-size:11px } .dtab td, .dtab th { padding:2px 4px; border-bottom:1px solid var(--line) }
+  .dtab tr.dest td { font-weight:700 } #tip .dtab { min-width:260px }
   #barbox svg { width:100%; height:auto; max-height:76vh; display:block; touch-action:auto }
   #barbox text { fill:var(--fg); font-family:inherit } #barbox .ax { fill:var(--mut); font-size:11px } #barbox .vl { font-size:9.5px; fill:var(--mut) }
   #barbox .xl { font-size:11px; font-weight:500 } #barbox .gr { stroke:var(--line); stroke-width:1 } #barbox rect { cursor:pointer }
@@ -79,6 +84,7 @@
   <h1>Apuração presidente<span id="sub"><span id="n1">Lula</span> x <span id="n2">Flávio Bolsonaro</span></span></h1>
   <div class="dir"><div id="meta">carregando…</div><button id="tema" aria-pressed="false" title="alternar tema claro/escuro"></button></div>
 </header>
+<nav id="modos" aria-label="Modo de visualização"></nav>
 <nav id="linha" aria-label="Linha do tempo de eleições"></nav>
 <section class="card" id="tempo" aria-label="Replay da apuração">
   <button id="tplay" title="tocar / pausar (espaço)">▶</button>
@@ -90,7 +96,10 @@
 </section>
 <main>
   <section class="card">
-    <div class="bar">
+    <div class="bar" id="cmpBar" hidden>
+      <span class="seg" id="segCVista"></span><span class="seg" id="segCEsc"></span><span class="seg" id="segCMet"></span><span class="seg" id="segCUnid"></span><span class="seg" id="segCN"></span>
+    </div>
+    <div class="bar" id="mainBar">
       <span class="seg" id="segVista"></span>
       <span class="seg" id="segNivel"></span>
       <span class="seg" id="segMetrica"></span>
@@ -105,8 +114,9 @@
     <div class="leg" id="leg"></div>
   </section>
   <aside style="display:flex;flex-direction:column;gap:16px">
+    <section class="card" id="cmpResumo" hidden></section>
     <section class="card" id="detalhe"></section>
-    <section class="card"><div class="seg" id="segTab" style="margin-bottom:8px"></div><table id="tab"><thead></thead><tbody></tbody></table></section>
+    <section class="card"><div class="seg" id="segTab" style="margin-bottom:8px"></div><div class="seg" id="segCTab" style="margin-bottom:8px" hidden></div><table id="tab"><thead></thead><tbody></tbody></table></section>
   </aside>
 </main>
 <footer>Fonte: TSE — Divulgação de resultados (<a href="https://resultados.tse.jus.br/" rel="noopener">resultados.tse.jus.br</a>) e Portal de Dados Abertos · <span id="fonte">–</span><br>Projeto independente, sem vínculo com a Justiça Eleitoral.</footer>
@@ -121,11 +131,11 @@ const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).
 const escuroAgora = () => document.documentElement.dataset.theme ? document.documentElement.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
 function rotuloTema() { const b = document.getElementById("tema"), e = escuroAgora(); b.textContent = e ? "☀ Tema claro" : "☾ Tema escuro"; b.setAttribute("aria-pressed", e); }
 try { const t = localStorage.getItem("tema"); if (t) document.documentElement.dataset.theme = t; } catch {}
-const st = { bCand:"ambos", bVal:"abs", bUnid:"pct", vista:"mapa", nivel:"estados", metrica:"voto", uf:null, pin:null, ord:"uf", asc:true, tab:"votos", zk:null };
+const st = { modo:"apuracao", cMet:"margem", cUnid:"abs", cEsc:"uf", cN:25, cTab:"uf", bCand:"ambos", bVal:"abs", bUnid:"pct", vista:"mapa", nivel:"estados", metrica:"voto", uf:null, pin:null, ord:"uf", asc:true, tab:"votos", zk:null };
 const METRICAS = { abst:["Abstenção","#b8860b"], brancos:["Brancos","#6d4fc2"], nulos:["Nulos","#d0489a"] };   // nivel: estados | municipios | uf
 let dados = null; const geos = {};
 { const t = new URLSearchParams(location.hash.slice(1)).get('tema'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; }   // #tema=dark força o tema
-new URLSearchParams(location.hash.slice(1)).forEach((v,k) => { if (k==='metrica'||k==='nivel'||k==='uf'||k==='tab'||k==='ord'||k==='eleicao'||k==='frame'||k==='pct'||k==='vista'||k==='bcand'||k==='bval'||k==='bunid') st[{frame:'frame0',bcand:'bCand',bval:'bVal',bunid:'bUnid'}[k] ?? k]=k==='pct'?+v:v; });   // ex.: #metrica=abst&nivel=uf&uf=sp&eleicao=2022-t2&pct=0.5 (pct = fração de urnas apuradas)
+new URLSearchParams(location.hash.slice(1)).forEach((v,k) => { if (k==='metrica'||k==='nivel'||k==='uf'||k==='tab'||k==='ord'||k==='eleicao'||k==='frame'||k==='pct'||k==='vista'||k==='bcand'||k==='bval'||k==='bunid'||k==='modo'||k==='cmet'||k==='cunid'||k==='cesc'||k==='cn'||k==='ctab') st[{frame:'frame0',bcand:'bCand',bval:'bVal',bunid:'bUnid',cmet:'cMet',cunid:'cUnid',cesc:'cEsc',cn:'cN',ctab:'cTab'}[k] ?? k]=k==='pct'?+v:v; });   // ex.: #metrica=abst&nivel=uf&uf=sp&eleicao=2022-t2&pct=0.5 (pct = fração de urnas apuradas)
 
 const N1 = () => (dados?.cands?.v1 ?? "Lula").split(" ")[0], N2 = () => (dados?.cands?.v2 ?? "Flávio").split(" ").slice(-1)[0];
 const pctApur = r => r && r.ts ? r.st/r.ts : 0;
@@ -359,7 +369,20 @@ function seg(id, opts, key) {
   opts.forEach(([val, rotulo]) => { const b = document.createElement("button"); b.textContent = rotulo; b.className = st[key] === val ? "on" : "";
     b.onclick = () => { st[key] = val; if (key === "nivel" && val !== "uf") { st.uf = null; st.pin = null; } render(); }; el.appendChild(b); });
 }
+function aplicarModo() {
+  const c = st.modo === "comparar";
+  document.body.classList.toggle("cmp", c);
+  document.getElementById("cmpBar").hidden = !c; document.getElementById("cmpResumo").hidden = !c; document.getElementById("segCTab").hidden = !c;
+  document.getElementById("mainBar").hidden = c; document.getElementById("segTab").hidden = c;
+  if (c) document.getElementById("barOpc").hidden = true;
+  const el = document.getElementById("modos"); el.innerHTML = "";
+  [["apuracao", "Apuração de cada eleição"], ["comparar", "Comparar 1º e 2º turno de 2026"]].forEach(([v, t]) => {
+    const b = document.createElement("button"); b.textContent = t; b.className = st.modo === v ? "on" : ""; b.setAttribute("aria-pressed", st.modo === v);
+    b.onclick = () => { if (st.modo === v) return; st.modo = v; st.pin = null; st.zk = null; v === "apuracao" ? aplicar() : render(); }; el.appendChild(b); });
+}
 function render() {
+  if (st.modo === "comparar") { aplicarModo(); return renderComparar(); }
+  aplicarModo();
   if (!dados) return;
   tip(null, null);   // um card de tooltip antigo não deve sobreviver a uma nova renderização
   calcEscala();
@@ -530,7 +553,7 @@ async function carregar() {
   }
 }
 document.addEventListener("keydown", ev => {   // ← / → andam na linha do tempo
-  if (!/^Arrow(Left|Right)$/.test(ev.key) || ev.target.closest("input,select,textarea")) return;
+  if (st.modo === "comparar" || !/^Arrow(Left|Right)$/.test(ev.key) || ev.target.closest("input,select,textarea")) return;
   const i = ELEICOES.findIndex(e => e.id === st.eleicao) + (ev.key === "ArrowRight" ? 1 : -1);
   if (ELEICOES[i]) trocar(ELEICOES[i].id);
 });
