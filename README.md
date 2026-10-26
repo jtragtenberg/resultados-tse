@@ -22,7 +22,7 @@ Só usa a biblioteca padrão do Python. O mapa usa d3 e as malhas do IBGE, carre
 - **Barras**, por estado ou pelos N municípios com maior valor, ordenadas da maior para a menor, que crescem conforme a apuração avança; em votos ou em %, e por candidato.
 - **Linha do tempo de eleições** (2022 1º e 2º turno, 2026 1º e 2º turno) e **replay**: um slider com a porcentagem de urnas apuradas, que lembra a % ao trocar de eleição.
 - **Comparar 1º e 2º turno de 2026** (outra aba): mudança de votos de cada candidato, de brancos, nulos e abstenção, e da vantagem de Lula, por estado e município, em mapa e em barras, com um resumo de "quem fez a diferença".
-- **Votos depois das 17h**: quantos votos foram confirmados depois do encerramento (hora de cada voto, sem o candidato), por município e UF, com histograma por minuto.
+- **Votos depois das 17h** (só no 2º turno de 2026, em que a votação foi prorrogada até as 19h): quantos votos foram confirmados depois do encerramento (hora de cada voto, sem o candidato), por município e UF, com histograma por minuto. Depende dos logs das urnas, que o TSE ainda não publicou para esse turno; até lá a aba mostra o contexto e uma conta de verificação.
 - Tema claro e escuro. O guia visual está em [design.md](design.md).
 
 ## Dados e scripts
@@ -34,7 +34,7 @@ Só usa a biblioteca padrão do Python. O mapa usa d3 e as malhas do IBGE, carre
 | `replay.py` | reduz os Boletins de Urna (hora de chegada por seção) a quadros de 5 min por município, em `dados/hist/<ano>-t<turno>-replay.json` |
 | `dados/hist/` | resultados finais e replays já gerados (cerca de 9 MB) |
 | `replay_db.py` | gera o replay a partir do banco SQLite do coletor (usado no 2º turno de 2026, de que ainda não há boletins de urna) |
-| `votos_apos17h.py` | lê os logs das urnas (centenas de GB no total, por HTTP Range) e conta votos confirmados depois do encerramento, por município |
+| `votos_apos17h.py` | lê os logs das urnas (centenas de GB no total, por HTTP Range) e conta votos confirmados depois do encerramento (para o 2º turno de 2026, quando o TSE publicar), por município |
 | `web/index.html`, `web/comparar.js` | a página e a aba de comparação |
 
 `dados/latest.json` e `dados/apuracao.db` são gerados pelo coletor e não são versionados.

@@ -266,7 +266,7 @@ const notaAbst = () => replay?.abst_estimada && (st.metrica === "abst" || st.met
   ? ` · <b>abstenção estimada</b> neste replay (eleitores × seções apuradas − comparecimento)` : "";
 function legenda() {
   const M = METRICAS[st.metrica];
-  if (st.metrica === "apos17h") { document.getElementById("leg").innerHTML = APOS17H ? `<i style="background:linear-gradient(90deg,#eee,${M[1]})"></i><span>% dos votos confirmados <b>depois do encerramento (17h de Brasília)</b>: 0% → ${pc(escala.apos17h)} (ou mais) · valor do dia inteiro, não muda com o slider · cinza = sem dados de log · <b>1º turno, sem prorrogação</b></span>` : `<span><b>Sem contagem de votos por horário para esta eleição</b>: o TSE ainda não publicou os arquivos das urnas (ou eles não foram processados). Veja o quadro ao lado.</span>`; return; }
+  if (st.metrica === "apos17h") { document.getElementById("leg").innerHTML = APOS17H ? `<i style="background:linear-gradient(90deg,#eee,${M[1]})"></i><span>% dos votos confirmados <b>depois do encerramento (17h de Brasília)</b>: 0% → ${pc(escala.apos17h)} (ou mais) · valor do dia inteiro, não muda com o slider · cinza = sem dados de log · </span>` : `<span><b>Sem contagem de votos por horário para esta eleição</b>: o TSE ainda não publicou os arquivos das urnas (ou eles não foram processados). Veja o quadro ao lado.</span>`; return; }
   document.getElementById("leg").innerHTML = M
     ? `<i style="background:linear-gradient(90deg,#eee,${M[1]})"></i><span>${M[0]}: 0% → ${pc(escala[st.metrica])} (ou mais) · cinza = nenhuma urna apurada · % sobre ${st.metrica === "abst" || st.metrica === "comp" ? "eleitores nas seções apuradas" : "votos totais apurados"}${notaAbst()}</span>`
     : st.metrica === "apuracao"
@@ -383,7 +383,7 @@ function desenharBarras() {
     : st.bVal === "abs" ? `votos de ${nome} apurados em cada estado`
     : st.bVal === "dist" ? `parte da votação total de ${nome} (já apurada) que vem de cada estado: as barras somam 100%`
     : `% dos votos válidos que ${nome} tem em cada estado (sobre ${N1()} + ${N2()})`;
-  else txt = M === "apos17h" ? (!APOS17H ? "sem contagem de votos por horário para esta eleição" : cfg.abs ? "votos confirmados depois das 17h (Brasília), 1º turno sem prorrogação" : "% dos votos do local confirmados depois das 17h (1º turno, sem prorrogação)") : M === "apuracao" ? (cfg.abs ? "votos apurados (comparecimento já contado) em cada estado" : "% de urnas apuradas")
+  else txt = M === "apos17h" ? (!APOS17H ? "sem contagem de votos por horário para esta eleição" : cfg.abs ? "votos confirmados depois das 17h (Brasília)" : "% dos votos do local confirmados depois das 17h") : M === "apuracao" ? (cfg.abs ? "votos apurados (comparecimento já contado) em cada estado" : "% de urnas apuradas")
     : `${METRICAS[M][0]} ${cfg.abs ? "(quantidade)" : "(% " + (M === "abst" || M === "comp" ? "dos eleitores das seções apuradas" : "dos votos apurados") + ")"}`;
   document.getElementById("leg").innerHTML = `<i style="background:${cfg.empilhado ? "linear-gradient(90deg,var(--cand1) 50%,var(--cand2) 50%)" : cor1}"></i><span>${txt.replace(/em cada estado|de cada estado|que vem de cada estado|em cada estado/, m => mun ? m.replace("estado", "município") : m)}, ${mun ? `dos ${st.bN} municípios com maior valor para o menor` : "do estado com mais para o com menos"} · eixo fixo na escala do resultado final${temFinal ? " · contorno tracejado = total ao fim da apuração" : ""}${notaAbst()} · clique numa barra para ver os detalhes</span>`;
 }
@@ -393,20 +393,18 @@ function desenharApos17h() {
   card.hidden = !(st.metrica === "apos17h" && st.modo === "apuracao");
   if (card.hidden) return;
   const F = final ?? dados, br = F.ufs.br, tit = document.getElementById("apos17hTit"), sub = document.getElementById("apos17hSub"), txt = document.getElementById("apos17hTxt");
-  const contexto = `<p><b>Contexto:</b> no <b>2º turno</b> (25/10/2026) o STF (ministro Zanin) prorrogou a votação até as 19h por pedidos das campanhas de Lula e de Flávio (transporte público reduzido, chuvas); o TSE avisou as seções às 17h49 e, segundo as reportagens, a prorrogação valia para as seções ainda abertas (${LINKS_PRORROGACAO}). No <b>1º turno</b> (04/10) não houve prorrogação.</p>`;
+  const contexto = `<p><b>Contexto:</b> no 2º turno (25/10/2026) o STF (ministro Zanin) prorrogou a votação até as 19h por pedidos das campanhas de Lula e de Flávio (transporte público reduzido, chuvas); o TSE avisou as seções às 17h49 e, segundo as reportagens, a prorrogação valia para as seções ainda abertas (${LINKS_PRORROGACAO}).</p>`;
   if (!APOS17H) {   // eleição sem contagem por horário
     svgEl.style.display = "none";
     tit.textContent = "Votos depois das 17h";
     sub.textContent = rotuloEleicao();
     const M = br.v1 - br.v2, C = br.comp, cen = [[1, "todos"], [0.75, "75%"], [0.6, "60%"]].map(([sh, rot]) => { const n = M / (2 * sh - 1); return `<tr><td>${rot} dos votos tardios seriam de ${N1()}</td><td>${fmt.format(Math.round(n))}</td><td>${pc(n / C)}</td></tr>`; }).join("");
-    const dois = st.eleicao === "2026-t2";
     txt.innerHTML = `<p>Votaram ao todo <b>${fmt.format(br.comp)}</b> pessoas (${pc(pComp(br))} dos ${fmt.format(br.comp + br.abst)} eleitores).</p>
-      ${dois ? `<p><b>Ainda não dá para contar</b> os votos dados depois das 17h no 2º turno: o TSE não publicou os arquivos das urnas (logs e boletins) deste turno, que trazem a hora de cada voto. Quando publicar, esta aba mostra quantos votos foram dados depois das 17h por estado e município.</p>
+      ${`<p><b>Ainda não dá para contar</b> os votos dados depois das 17h no 2º turno: o TSE não publicou os arquivos das urnas (logs e boletins) deste turno, que trazem a hora de cada voto. Quando publicar, esta aba mostra quantos votos foram dados depois das 17h por estado e município.</p>
       <p><b>Conta de verificação</b> (aritmética, não é a contagem real): a vantagem final de ${N1()} é de ${fmt.format(M)} votos (${pc(M / C)} dos que votaram). Para a prorrogação ter mudado o resultado, seria preciso que muitos votos tivessem sido dados depois das 17h <i>e</i> que quase todos fossem de ${N1()}. Número mínimo de votos tardios para anular a vantagem:</p>
       <table class="dtab"><tr><th>hipótese</th><th>votos tardios</th><th>% de quem votou</th></tr>${cen}</table>
-      <p class="m">Isso desconsidera quem não teria votado de jeito nenhum sem a prorrogação.</p>` : `<p>Esta eleição não tem a contagem de votos por horário.</p>`}
-      ${contexto}<p><button id="verApos17h1">Ver o 1º turno de 2026 (sem prorrogação), que já tem a contagem</button></p>`;
-    const b = document.getElementById("verApos17h1"); if (b) b.onclick = () => { st.metrica = "apos17h"; trocar("2026-t1"); };
+      <p class="m">Isso desconsidera quem não teria votado de jeito nenhum sem a prorrogação.</p>`}
+      ${contexto}`;
     return;
   }
   svgEl.style.display = "";
@@ -420,12 +418,12 @@ function desenharApos17h() {
   const g = d3.select("#apos17hSvg"); g.selectAll("*").remove();
   y.ticks(3).forEach(v => { g.append("line").attr("x1", m.l).attr("x2", W - m.r).attr("y1", y(v)).attr("y2", y(v)).attr("stroke", css("--line")); g.append("text").attr("x", m.l - 4).attr("y", y(v)).attr("dy", "0.32em").attr("text-anchor", "end").text(compacto(v)); });
   h.forEach((v, i) => g.append("rect").attr("class", i + j0 >= 0 ? "b2" : "b1").attr("x", x(i)).attr("width", Math.max(bw - 0.4, 0.6)).attr("y", y(v)).attr("height", H - m.b - y(v)));
-  [-60, -30, 0, 30, 60, 120, 180].forEach(t => { const i = t - j0; g.append("text").attr("x", x(i)).attr("y", H - m.b + 12).attr("text-anchor", "middle").text(t === 0 ? "encerra" : (t > 0 ? "+" : "") + t + " min"); });
+  [-60, -30, 0, 30, 60, 120, 180].forEach(t => { const i = t - j0; g.append("text").attr("x", x(i)).attr("y", H - m.b + 12).attr("text-anchor", "middle").text(t === 0 ? "17h" : t === 120 ? "19h" : (t > 0 ? "+" : "") + t + " min"); });
   g.append("line").attr("x1", x(-j0)).attr("x2", x(-j0)).attr("y1", m.t).attr("y2", H - m.b).attr("stroke", css("--fg")).attr("stroke-width", 1);
   const tot = reg?.comp || u.votos;
   txt.innerHTML = `<p>Votaram ao todo <b>${fmt.format(tot)}</b> (${pc(reg ? pComp(reg) : 0)} dos eleitores). Depois do encerramento: <b>${fmt.format(u.apos17h)}</b> votos (${pc(u.votos ? u.apos17h / u.votos : 0)}), em ${fmt.format(u.ut)} de ${fmt.format(u.urnas)} urnas. Barras laranja = votos depois do encerramento.</p>
     <p class="m">Contagem pelos logs das urnas, que cobrem ${pc(F.ufs.br.comp ? APOS17H.ufs.br.votos / F.ufs.br.comp : 0)} dos votos. O log registra a hora de cada voto confirmado, mas não em quem: o voto é secreto.</p>
-    <p class="m"><b>Estes dados são do 1º turno, que não teve prorrogação:</b> os votos depois das 17h aqui são de quem já estava na fila na hora do encerramento. O 2º turno (com votação até as 19h) ainda não tem essa contagem.</p>${contexto}`;
+    <p class="m">Os votos entre as 17h e as 19h incluem os de quem já estava na fila às 17h e os das seções em que a votação foi prorrogada.</p>${contexto}`;
 }
 function seg(id, opts, key) {
   const el = document.getElementById(id); el.innerHTML = "";
@@ -463,13 +461,14 @@ function render() {
   if (st.modo === "comparar") { aplicarModo(); return renderComparar(); }
   aplicarModo();
   if (!dados) return;
+  if (st.metrica === "apos17h" && st.eleicao !== "2026-t2") st.metrica = "voto";   // a contagem de votos após as 17h é só do 2º turno de 2026 (o de votação prorrogada)
 
   tip(null, null);   // um card de tooltip antigo não deve sobreviver a uma nova renderização
   calcEscala();
   seg("segVista", [["mapa","Mapa"],["barras","Barras"]], "vista");
   seg("segNivel", [["estados","Estados"],["municipios","Municípios do Brasil"]], "nivel");
   if (st.nivel === "uf") document.querySelectorAll("#segNivel button").forEach(b => b.className = "");
-  seg("segMetrica", [["voto","Votos válidos"],["apuracao","Urnas apuradas"],["comp","Comparecimento"],["abst","Abstenção"],["brancos","Brancos"],["nulos","Nulos"], ["apos17h","Votos após as 17h"]], "metrica");
+  seg("segMetrica", [["voto","Votos válidos"],["apuracao","Urnas apuradas"],["comp","Comparecimento"],["abst","Abstenção"],["brancos","Brancos"],["nulos","Nulos"], ...(st.eleicao === "2026-t2" ? [["apos17h","Votos após as 17h"]] : [])], "metrica");
   { const el = document.getElementById("segTab"); el.innerHTML = "";
     [["votos","Votos"],["outros","Abstenção, brancos e nulos"]].forEach(([v,t]) => { const b = document.createElement("button"); b.textContent = t; b.className = st.tab === v ? "on" : ""; b.onclick = () => { st.tab = v; tabela(); document.querySelectorAll("#segTab button").forEach(x => x.className = x.textContent === t ? "on" : ""); }; el.appendChild(b); }); }
   const barras = st.vista === "barras", M = st.metrica;
@@ -493,7 +492,7 @@ voltar.onclick = () => { st.nivel = "estados"; st.uf = null; st.pin = null; rend
 
 const ELEICOES = [
   { id:"2022-t1", rotulo:"2022 · 1º turno", replay:true }, { id:"2022-t2", rotulo:"2022 · 2º turno", replay:true },
-  { id:"2026-t1", rotulo:"2026 · 1º turno", replay:true, apos17h:true }, { id:"2026-t2", rotulo:"2026 · 2º turno", replay:true },
+  { id:"2026-t1", rotulo:"2026 · 1º turno", replay:true }, { id:"2026-t2", rotulo:"2026 · 2º turno", replay:true },
 ];
 /* Fonte dos dados ao vivo (só numa eleição em andamento): ?api=URL > web/config.js. Vazia = sem botão "Ao vivo". */
 const API = (() => {
