@@ -388,6 +388,14 @@ function desenharBarras() {
   document.getElementById("leg").innerHTML = `<i style="background:${cfg.empilhado ? "linear-gradient(90deg,var(--cand1) 50%,var(--cand2) 50%)" : cor1}"></i><span>${txt.replace(/em cada estado|de cada estado|que vem de cada estado|em cada estado/, m => mun ? m.replace("estado", "município") : m)}, ${mun ? `dos ${st.bN} municípios com maior valor para o menor` : "do estado com mais para o com menos"} · eixo fixo na escala do resultado final${temFinal ? " · contorno tracejado = total ao fim da apuração" : ""}${notaAbst()} · clique numa barra para ver os detalhes</span>`;
 }
 const LINKS_PRORROGACAO = `<a href="https://www.poder360.com.br/poder-eleicoes-2026/zanin-prorroga-votacao-do-2o-turno-ate-19h/" rel="noopener">Poder360</a>, <a href="https://www.gazetadopovo.com.br/eleicoes/2026/stf-concede-liminar-e-prorroga-votacao-ate-as-19h-em-todo-o-brasil/" rel="noopener">Gazeta do Povo</a>`;
+function avisoApos17h(barras) {
+  const msg = `<div style="padding:48px 24px;text-align:center;max-width:520px;margin:0 auto"><div style="font-size:18px;font-weight:700;margin-bottom:8px">Ainda não há dados de votos depois das 17h</div>
+    <p class="m" style="font-size:14px">A hora de cada voto só existe nos arquivos das urnas (logs e boletins), e o TSE ainda não publicou os do 2º turno. Sem eles, não dá para desenhar o mapa nem as barras. O quadro ao lado mostra o que já se sabe: quantos votaram e a conta de verificação.</p>
+    <p class="m" style="font-size:14px">Para ver <b>quantas pessoas votaram</b> em cada estado e município, use a aba <b>Comparecimento</b>.</p></div>`;
+  for (const id of ["svgbox", "barbox"]) d3.select("#" + id).selectAll("*").remove();
+  d3.select(barras ? "#barbox" : "#svgbox").html(msg);
+  document.getElementById("leg").innerHTML = "";
+}
 function desenharApos17h() {
   const card = document.getElementById("apos17hCard"), svgEl = document.getElementById("apos17hSvg");
   card.hidden = !(st.metrica === "apos17h" && st.modo === "apuracao");
@@ -486,7 +494,9 @@ function render() {
   document.getElementById("segNivel").hidden = barras; document.getElementById("svgwrap").hidden = barras; document.getElementById("barbox").hidden = !barras;
   voltar.hidden = barras || st.nivel !== "uf";
   titulo.textContent = barras ? (st.bEsc === "mun" ? "Municípios do maior para o menor valor" : "Estados do maior para o menor valor") : st.nivel === "uf" ? st.uf.toUpperCase() + " por município" : "";
-  detalhe(); tabela(); desenharApos17h(); barras ? desenharBarras() : desenhar();
+  detalhe(); tabela(); desenharApos17h();
+  if (st.metrica === "apos17h" && !APOS17H) return avisoApos17h(barras);   // sem dados: aviso no lugar de um mapa/gráfico vazio
+  barras ? desenharBarras() : desenhar();
 }
 voltar.onclick = () => { st.nivel = "estados"; st.uf = null; st.pin = null; render(); };
 
