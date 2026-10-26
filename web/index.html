@@ -107,7 +107,7 @@
       <strong id="titulo"></strong>
     </div>
     <div class="bar" id="barOpc" hidden>
-      <span class="seg" id="segBCand"></span><span class="seg" id="segBVal"></span><span class="seg" id="segBUnid"></span>
+      <span class="seg" id="segBEsc"></span><span class="seg" id="segBN"></span><span class="seg" id="segBCand"></span><span class="seg" id="segBVal"></span><span class="seg" id="segBUnid"></span>
     </div>
     <div id="svgwrap"><div id="zoom"><button id="zin" title="aproximar">+</button><button id="zout" title="afastar">−</button><button id="zreset" title="ver tudo" style="font-size:12px">⌂</button></div><div id="loading" hidden>carregando malha do IBGE…</div><div id="svgbox"></div></div>
     <div id="barbox" hidden></div>
@@ -131,11 +131,11 @@ const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).
 const escuroAgora = () => document.documentElement.dataset.theme ? document.documentElement.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
 function rotuloTema() { const b = document.getElementById("tema"), e = escuroAgora(); b.textContent = e ? "☀ Tema claro" : "☾ Tema escuro"; b.setAttribute("aria-pressed", e); }
 try { const t = localStorage.getItem("tema"); if (t) document.documentElement.dataset.theme = t; } catch {}
-const st = { modo:"apuracao", cMet:"margem", cUnid:"abs", cEsc:"uf", cN:25, cTab:"uf", bCand:"ambos", bVal:"abs", bUnid:"pct", vista:"mapa", nivel:"estados", metrica:"voto", uf:null, pin:null, ord:"uf", asc:true, tab:"votos", zk:null };
+const st = { modo:"apuracao", cMet:"margem", cUnid:"abs", cEsc:"uf", cN:25, cTab:"uf", bEsc:"uf", bN:25, bCand:"ambos", bVal:"abs", bUnid:"pct", vista:"mapa", nivel:"estados", metrica:"voto", uf:null, pin:null, ord:"uf", asc:true, tab:"votos", zk:null };
 const METRICAS = { abst:["Abstenção","#b8860b"], brancos:["Brancos","#6d4fc2"], nulos:["Nulos","#d0489a"] };   // nivel: estados | municipios | uf
 let dados = null; const geos = {};
 { const t = new URLSearchParams(location.hash.slice(1)).get('tema'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; }   // #tema=dark força o tema
-new URLSearchParams(location.hash.slice(1)).forEach((v,k) => { if (k==='metrica'||k==='nivel'||k==='uf'||k==='tab'||k==='ord'||k==='eleicao'||k==='frame'||k==='pct'||k==='vista'||k==='bcand'||k==='bval'||k==='bunid'||k==='modo'||k==='cmet'||k==='cunid'||k==='cesc'||k==='cn'||k==='ctab') st[{frame:'frame0',bcand:'bCand',bval:'bVal',bunid:'bUnid',cmet:'cMet',cunid:'cUnid',cesc:'cEsc',cn:'cN',ctab:'cTab'}[k] ?? k]=k==='pct'?+v:v; });   // ex.: #metrica=abst&nivel=uf&uf=sp&eleicao=2022-t2&pct=0.5 (pct = fração de urnas apuradas)
+new URLSearchParams(location.hash.slice(1)).forEach((v,k) => { if (k==='metrica'||k==='nivel'||k==='uf'||k==='tab'||k==='ord'||k==='eleicao'||k==='frame'||k==='pct'||k==='vista'||k==='bcand'||k==='bval'||k==='bunid'||k==='besc'||k==='bn'||k==='modo'||k==='cmet'||k==='cunid'||k==='cesc'||k==='cn'||k==='ctab') st[{frame:'frame0',bcand:'bCand',bval:'bVal',bunid:'bUnid',besc:'bEsc',bn:'bN',cmet:'cMet',cunid:'cUnid',cesc:'cEsc',cn:'cN',ctab:'cTab'}[k] ?? k]=(k==='pct'||k==='bn'||k==='cn')?+v:v; });   // ex.: #metrica=abst&nivel=uf&uf=sp&eleicao=2022-t2&pct=0.5 (pct = fração de urnas apuradas)
 
 const N1 = () => (dados?.cands?.v1 ?? "Lula").split(" ")[0], N2 = () => (dados?.cands?.v2 ?? "Flávio").split(" ").slice(-1)[0];
 const pctApur = r => r && r.ts ? r.st/r.ts : 0;
@@ -311,20 +311,25 @@ function configBarras(D) {
 }
 function desenharBarras() {
   const M = st.metrica, cfg = configBarras(dados), cfgF = configBarras(final ?? dados);
-  const W = 900, H = 480, mg = { t:18, r:8, b:34, l:56 }, iw = W - mg.l - mg.r, ih = H - mg.t - mg.b;
-  const rows = Object.entries(dados.ufs).filter(([k]) => k !== "br").map(([k, r]) => ({ k, r, v:cfg.val(r) }))
-    .sort((a, b) => b.v - a.v || a.k.localeCompare(b.k));
-  const finalUF = Object.fromEntries(Object.entries((final ?? dados).ufs));
+  const mun = st.bEsc === "mun";   // escopo: estados, ou os N municípios com maior valor
+  const W = 900, H = mun ? 520 : 480, mg = { t:18, r:8, b:mun ? 92 : 34, l:56 }, iw = W - mg.l - mg.r, ih = H - mg.t - mg.b;
+  const fonte = (final ?? dados), dosRegs = D => mun ? D.mun : Object.fromEntries(Object.entries(D.ufs).filter(([k]) => k !== "br"));
+  let rows = Object.entries(dosRegs(dados)).map(([k, r]) => ({ k, r, v:cfg.val(r) }))
+    .sort((a, b) => b.v - a.v || (b.r.total || 0) - (a.r.total || 0) || a.k.localeCompare(b.k));
+  if (mun) rows = rows.slice(0, st.bN);
+  const finalUF = dosRegs(fonte);
+  const nomeReg = d => mun ? `${d.r.nm} – ${d.r.uf.toUpperCase()}` : d.k === "zz" ? "EXT" : d.k.toUpperCase();
   const temFinal = cfg.abs && final && dados !== final;   // contorno tracejado = quanto vai ter ao fim da apuração
   rows.forEach(d => d.fin = temFinal && finalUF[d.k] ? cfgF.val(finalUF[d.k]) : 0);
   // eixo vertical fixo na escala do resultado final: as barras crescem em vez de o eixo se mexer durante o replay
-  const ref = Object.entries((final ?? dados).ufs).filter(([k]) => k !== "br").map(([, r]) => cfgF.val(r));
+  const ref = Object.values(finalUF).map(r => cfgF.val(r));
   const y = d3.scaleLinear().domain([0, Math.max(...ref, ...rows.map(d => d.v), 1e-9)]).nice().range([ih, 0]);
   const x = d3.scaleBand(rows.map(d => d.k), [0, iw]).padding(0.16);
   const box = d3.select("#barbox");
   let svg = box.select("svg");
+  if (!svg.empty() && svg.attr("data-esc") !== (mun ? "mun" : "uf")) { svg.remove(); svg = box.select("svg"); }   // trocou o escopo: refaz o desenho
   if (svg.empty()) {
-    svg = box.append("svg").attr("viewBox", `0 0 ${W} ${H}`).attr("role", "img").attr("aria-label", "Gráfico de barras por estado");
+    svg = box.append("svg").attr("viewBox", `0 0 ${W} ${H}`).attr("role", "img").attr("aria-label", "Gráfico de barras").attr("data-esc", mun ? "mun" : "uf");
     const g0 = svg.append("g").attr("transform", `translate(${mg.l},${mg.t})`);
     g0.append("g").attr("class", "grid"); g0.append("g").attr("class", "bars");
   }
@@ -340,9 +345,9 @@ function desenharBarras() {
     b.append("text").attr("class", "vl").attr("text-anchor", "middle").attr("y", ih - 4);
     b.append("text").attr("class", "xl").attr("text-anchor", "middle").attr("y", ih + 18);
     return b; });
-  gb.attr("data-k", d => d.k).on("mousemove", (ev, d) => tip(ev, tipHtml(d.k.toUpperCase(), d.r) + (d.fin ? `<div class="m">ao fim da apuração: ${fmt.format(Math.round(d.fin))}</div>` : "")))
+  gb.attr("data-k", d => d.k).on("mousemove", (ev, d) => tip(ev, tipHtml(nomeReg(d), d.r) + (d.fin ? `<div class="m">ao fim da apuração: ${fmt.format(Math.round(d.fin))}</div>` : "")))
     .on("mouseleave", () => tip(null, null))
-    .on("click", (ev, d) => { st.pin = st.pin?.k === d.k ? null : { k:d.k, nome:d.k.toUpperCase() }; render(); });
+    .on("click", (ev, d) => { st.pin = st.pin?.k === d.k ? null : { k:d.k, nome:nomeReg(d) }; render(); });
   gb.transition(t).attr("transform", d => `translate(${x(d.k)},0)`);
   gb.select(".gh").attr("x", 0).attr("width", x.bandwidth()).attr("pointer-events", "none")
     .transition(t).attr("y", d => d.fin ? y(d.fin) : ih).attr("height", d => d.fin ? ih - y(d.fin) : 0);
@@ -350,9 +355,11 @@ function desenharBarras() {
     .transition(t).attr("y", d => y(cfg.empilhado ? d.r.v1 : d.v)).attr("height", d => ih - y(cfg.empilhado ? d.r.v1 : d.v));
   gb.select(".r2").attr("x", 0).attr("width", x.bandwidth()).attr("fill", cor2).classed("sel", d => st.pin?.k === d.k)
     .transition(t).attr("y", d => cfg.empilhado ? y(d.v) : ih).attr("height", d => cfg.empilhado ? y(d.r.v1) - y(d.v) : 0);
-  gb.select(".vl").attr("x", x.bandwidth() / 2).text(d => d.v ? rotulo(d.v) : "")
+  gb.select(".vl").attr("x", x.bandwidth() / 2).text(d => d.v && rows.length <= 32 ? rotulo(d.v) : "")
     .transition(t).attr("y", d => y(Math.max(d.v, d.fin || 0)) - 4);
-  gb.select(".xl").attr("x", x.bandwidth() / 2).text(d => d.k === "zz" ? "EXT" : d.k.toUpperCase());
+  const xl = gb.select(".xl").text(d => mun ? (d.r.nm.length > 14 ? d.r.nm.slice(0, 13) + "…" : d.r.nm) + " " + d.r.uf.toUpperCase() : d.k === "zz" ? "EXT" : d.k.toUpperCase());
+  if (mun) xl.attr("x", 0).attr("y", 0).attr("transform", `translate(${x.bandwidth() / 2},${ih + 8}) rotate(60)`).attr("text-anchor", "start").style("font-size", "9px");
+  else xl.attr("transform", null).attr("x", x.bandwidth() / 2).attr("y", ih + 18).attr("text-anchor", "middle").style("font-size", null);
   const nome = cfg.k ? (cfg.k === "v1" ? N1() : N2()) : "";
   let txt;
   if (M === "voto") txt = cfg.empilhado
@@ -362,7 +369,7 @@ function desenharBarras() {
     : `% dos votos válidos que ${nome} tem em cada estado (sobre ${N1()} + ${N2()})`;
   else txt = M === "apuracao" ? (cfg.abs ? "votos apurados (comparecimento já contado) em cada estado" : "% de urnas apuradas")
     : `${METRICAS[M][0]} ${cfg.abs ? "(quantidade)" : "(% " + (M === "abst" ? "dos eleitores das seções apuradas" : "dos votos apurados") + ")"}`;
-  document.getElementById("leg").innerHTML = `<i style="background:${cfg.empilhado ? "linear-gradient(90deg,var(--cand1) 50%,var(--cand2) 50%)" : cor1}"></i><span>${txt}, do estado com mais para o com menos · eixo fixo na escala do resultado final${temFinal ? " · contorno tracejado = total ao fim da apuração" : ""}${notaAbst()} · clique numa barra para ver os detalhes</span>`;
+  document.getElementById("leg").innerHTML = `<i style="background:${cfg.empilhado ? "linear-gradient(90deg,var(--cand1) 50%,var(--cand2) 50%)" : cor1}"></i><span>${txt.replace(/em cada estado|de cada estado|que vem de cada estado|em cada estado/, m => mun ? m.replace("estado", "município") : m)}, ${mun ? `dos ${st.bN} municípios com maior valor para o menor` : "do estado com mais para o com menos"} · eixo fixo na escala do resultado final${temFinal ? " · contorno tracejado = total ao fim da apuração" : ""}${notaAbst()} · clique numa barra para ver os detalhes</span>`;
 }
 function seg(id, opts, key) {
   const el = document.getElementById(id); el.innerHTML = "";
@@ -386,7 +393,7 @@ function render() {
   if (!dados) return;
   tip(null, null);   // um card de tooltip antigo não deve sobreviver a uma nova renderização
   calcEscala();
-  seg("segVista", [["mapa","Mapa"],["barras","Barras por estado"]], "vista");
+  seg("segVista", [["mapa","Mapa"],["barras","Barras"]], "vista");
   seg("segNivel", [["estados","Estados"],["municipios","Municípios do Brasil"]], "nivel");
   if (st.nivel === "uf") document.querySelectorAll("#segNivel button").forEach(b => b.className = "");
   seg("segMetrica", [["voto","Votos válidos"],["apuracao","Urnas apuradas"],["abst","Abstenção"],["brancos","Brancos"],["nulos","Nulos"]], "metrica");
@@ -395,6 +402,8 @@ function render() {
   const barras = st.vista === "barras", M = st.metrica;
   document.getElementById("barOpc").hidden = !barras;
   if (barras) {
+    seg("segBEsc", [["uf","Por estado"],["mun","Por município"]], "bEsc"); seg("segBN", [[15,"15"],[25,"25"],[50,"50"]], "bN");
+    document.getElementById("segBN").hidden = st.bEsc !== "mun";
     seg("segBCand", [["ambos","Os dois candidatos"],["v1",N1()],["v2",N2()]], "bCand");
     seg("segBVal", [["abs","Votos"],["dist",`Distribuição (% do total de ${st.bCand === "v2" ? N2() : N1()})`],["pct","% dos válidos no estado"]], "bVal");
     seg("segBUnid", [["pct","Porcentagem"],["abs", M === "apuracao" ? "Quantidade de votos apurados" : "Quantidade"]], "bUnid");
@@ -404,7 +413,7 @@ function render() {
   }
   document.getElementById("segNivel").hidden = barras; document.getElementById("svgwrap").hidden = barras; document.getElementById("barbox").hidden = !barras;
   voltar.hidden = barras || st.nivel !== "uf";
-  titulo.textContent = barras ? "Estados do maior para o menor valor" : st.nivel === "uf" ? st.uf.toUpperCase() + " por município" : "";
+  titulo.textContent = barras ? (st.bEsc === "mun" ? "Municípios do maior para o menor valor" : "Estados do maior para o menor valor") : st.nivel === "uf" ? st.uf.toUpperCase() + " por município" : "";
   detalhe(); tabela(); barras ? desenharBarras() : desenhar();
 }
 voltar.onclick = () => { st.nivel = "estados"; st.uf = null; st.pin = null; render(); };
