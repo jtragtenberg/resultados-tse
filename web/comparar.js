@@ -87,6 +87,7 @@ function cmpResumo() {
   document.getElementById("cmpResumo").innerHTML = `<div style="font-size:16px;font-weight:700;margin-bottom:4px">Quem fez a diferença</div>
     <div class="m">No 1º turno ${m1 < 0 ? cN2() + " tinha " + fmt.format(-m1) + " votos a mais que " + cN1() : cN1() + " tinha " + fmt.format(m1) + " votos a mais"}. No 2º, ${m2 >= 0 ? cN1() : cN2()} terminou ${fmt.format(Math.abs(m2))} votos à frente.
     A vantagem de ${cN1()} mudou <b>${sinal(virada)}</b> votos entre os turnos.</div>
+    <div class="m" style="margin-top:6px">Votaram <b>${fmt.format(br.a.C)}</b> pessoas no 1º turno e <b>${fmt.format(br.b.C)}</b> no 2º (<b>${sinal(br.b.C - br.a.C)}</b>; a abstenção ${br.b.A < br.a.A ? "caiu" : "subiu"} ${fmt.format(Math.abs(br.b.A - br.a.A))}). A vantagem final de ${cN1()} (${fmt.format(Math.abs(m2))}) equivale a ${(100 * Math.abs(m2) / br.b.C).toFixed(1).replace(".", ",")}% de quem votou no 2º turno.</div>
     <div class="m" style="margin-top:6px"><b>${n50} estados</b> (${ord.slice(0, n50).map(r => r.nm).join(", ")}) respondem por metade dessa mudança.</div>
     <table class="dtab" style="margin-top:6px"><tr><th>Estado</th><th>mudança na vantagem</th><th>% do total</th></tr>${top}</table>
     <div class="m" style="margin-top:6px">${trocaram.length ? `Mudaram de lado: <b>${trocaram.map(r => r.nm).join(", ")}</b>.` : "Nenhum estado mudou de lado."}

@@ -12,7 +12,7 @@ import argparse, datetime as dt, json, os, sqlite3
 
 RAIZ = os.path.dirname(os.path.abspath(__file__))
 ap = argparse.ArgumentParser()
-ap.add_argument("db"); ap.add_argument("id"); ap.add_argument("--data", default="25/10/2026"); ap.add_argument("--bin", type=int, default=5); ap.add_argument("--inicio", default="17:00", help="horário (Brasília) em que o eixo começa; versões anteriores (zeradas) caem no 1º quadro")
+ap.add_argument("db"); ap.add_argument("id"); ap.add_argument("--data", default="25/10/2026"); ap.add_argument("--bin", type=int, default=5); ap.add_argument("--nota", default="", help="texto mostrado sob o slider"); ap.add_argument("--inicio", default="17:00", help="horário (Brasília) em que o eixo começa; versões anteriores (zeradas) caem no 1º quadro")
 a = ap.parse_args()
 final = json.load(open(os.path.join(RAIZ, "dados", "hist", a.id + ".json")))
 c = sqlite3.connect(a.db)
@@ -44,7 +44,7 @@ for chave, lista in ev.items():
 frames, cum = [], 0
 for f in range(nf):
     cum += por_quadro[f]; frames.append({"t": (t0 + f * passo).strftime("%Y-%m-%d %H:%M"), "p": round(cum / total, 5)})
-out = {"bin": a.bin, "total": total, "frames": frames, "mun": mun, "fonte": "coletor", "abst_estimada": True}
+out = {"bin": a.bin, "total": total, "frames": frames, "mun": mun, "fonte": "coletor", "abst_estimada": True, "nota": a.nota}
 dest = os.path.join(RAIZ, "dados", "hist", a.id + "-replay.json")
 json.dump(out, open(dest, "w"), separators=(",", ":"))
 print(f"{len(mun)} municípios, {nf} quadros de {a.bin} min, de {frames[0]['t']} a {frames[-1]['t']}; p inicial {frames[0]['p']} final {frames[-1]['p']} -> {dest} ({os.path.getsize(dest)/1e6:.1f} MB)")
