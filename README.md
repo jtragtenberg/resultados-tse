@@ -34,7 +34,7 @@ Só usa a biblioteca padrão do Python. O mapa usa d3 e as malhas do IBGE, carre
 | `replay.py` | reduz os Boletins de Urna (hora de chegada por seção) a quadros de 5 min por município, em `dados/hist/<ano>-t<turno>-replay.json` |
 | `dados/hist/` | resultados finais e replays já gerados (cerca de 9 MB) |
 | `replay_db.py` | gera o replay a partir do banco SQLite do coletor (usado no 2º turno de 2026, de que ainda não há boletins de urna) |
-| `votos_tarde.py` | lê os logs das urnas (centenas de GB no total, por HTTP Range) e conta votos confirmados depois do encerramento, por município |
+| `votos_apos17h.py` | lê os logs das urnas (centenas de GB no total, por HTTP Range) e conta votos confirmados depois do encerramento, por município |
 | `web/index.html`, `web/comparar.js` | a página e a aba de comparação |
 
 `dados/latest.json` e `dados/apuracao.db` são gerados pelo coletor e não são versionados.

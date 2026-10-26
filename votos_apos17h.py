@@ -4,16 +4,16 @@ foram confirmados DEPOIS do horário de encerramento (17h de Brasília = fim do 
 
 O log de cada urna registra "Voto confirmado para [Presidente]" com data e hora (segundos). NÃO registra em quem: o voto é secreto.
 
-  python3 votos_tarde.py --ano 2026 --turno 1 [--ufs AC,AL] [--processos 4]
+  python3 votos_apos17h.py --ano 2026 --turno 1 [--ufs AC,AL] [--processos 4]
 
-Lê cada .zip do TSE por HTTP Range (só os logs, sem gravar nada em disco) e grava dados/hist/<ano>-t<turno>-tarde.json.
+Lê cada .zip do TSE por HTTP Range (só os logs, sem gravar nada em disco) e grava dados/hist/<ano>-t<turno>-apos17h.json.
 O horário de abertura de cada urna ("Urna pronta para receber votos", 8h de Brasília no relógio local) serve de referência
 para achar o horário de encerramento local (abertura + 9h), o que resolve os fusos (AC, AM, MT, Noronha, exterior...).
 """
 import argparse, collections, concurrent.futures as cf, datetime as dt, io, json, os, re, struct, sys, time, urllib.request, zipfile, zlib
 
 RAIZ = os.path.dirname(os.path.abspath(__file__))
-UA = {"User-Agent": "Mozilla/5.0 (votos_tarde)"}
+UA = {"User-Agent": "Mozilla/5.0 (votos_apos17h)"}
 JANELA = (-60, 180)   # minutos em relação ao encerramento, em que se guarda o histograma por minuto
 NOME = re.compile(r"^o(\d{5})([a-z]{2})(\d{5})(\d{4})(\d{4})-log\.(jez|logjez)$", re.I)
 
@@ -122,20 +122,20 @@ def resumir(uf, urnas):
         if u[1] is not None: por_mun[u[0]][hora_ab(u[1])] += 1
     out_mun, hist = {}, [0] * (JANELA[1] - JANELA[0] + 1)
     bins = [(0, 5), (5, 15), (15, 30), (30, 60), (60, 120), (120, 10**9)]
-    for cod, ab, total, tarde_cand, enc in urnas:
+    for cod, ab, total, cand_apos17h, enc in urnas:
         # exterior: cada posto segue o horário local do seu município; Brasil: moda da UF, exceto município com fuso próprio (Noronha)
         mm = por_mun[cod]; h = mm.most_common(1)[0][0] if (uf == "ZZ" or (sum(mm.values()) >= 3 and mm.most_common(1)[0][0] != moda_uf)) else moda_uf
         corte = (h + 9) * 3600
-        m = out_mun.setdefault(cod, {"urnas": 0, "votos": 0, "tarde": 0, "bins": [0] * len(bins), "ultimo_min": 0.0, "urnas_tarde": 0, "enc_atraso_min": 0.0})
+        m = out_mun.setdefault(cod, {"urnas": 0, "votos": 0, "apos17h": 0, "bins": [0] * len(bins), "ultimo_min": 0.0, "urnas_apos17h": 0, "enc_atraso_min": 0.0})
         m["urnas"] += 1; m["votos"] += total
-        apos = [s for s in tarde_cand if s > corte]
+        apos = [s for s in cand_apos17h if s > corte]
         if apos:
-            m["tarde"] += len(apos); m["urnas_tarde"] += 1; m["ultimo_min"] = max(m["ultimo_min"], (max(apos) - corte) / 60)
+            m["apos17h"] += len(apos); m["urnas_apos17h"] += 1; m["ultimo_min"] = max(m["ultimo_min"], (max(apos) - corte) / 60)
             for s in apos:
                 mi = (s - corte) / 60
                 for k, (a, b) in enumerate(bins):
                     if a <= mi < b: m["bins"][k] += 1; break
-        for s in tarde_cand:
+        for s in cand_apos17h:
             k = int((s - corte) // 60) - JANELA[0]
             if 0 <= k < len(hist): hist[k] += 1
         if enc is not None: m["enc_atraso_min"] += max(0, (enc - corte) / 60)
@@ -143,17 +143,17 @@ def resumir(uf, urnas):
 
 
 CM = "https://resultados.tse.jus.br/oficial/ele2026/6257/config/mun-e006257-cm.json"
-SOMA = ("urnas", "votos", "tarde", "urnas_tarde", "enc_atraso_min")
+SOMA = ("urnas", "votos", "apos17h", "urnas_apos17h", "enc_atraso_min")
 
 
 def compactar(bruto):
     """Formato do site: municípios por código IBGE (o exterior fica só em ufs.zz), totais por UF e histograma por minuto."""
     cm = json.load(urllib.request.urlopen(urllib.request.Request(CM, headers=UA), timeout=60))
     ibge = {m["cd"]: m["cdi"] for ab in cm["abr"] for m in ab["mu"]}
-    nova = lambda: {"urnas": 0, "votos": 0, "tarde": 0, "ut": 0, "enc": 0.0, "ult": 0.0, "b": [0] * 6}
+    nova = lambda: {"urnas": 0, "votos": 0, "apos17h": 0, "ut": 0, "enc": 0.0, "ult": 0.0, "b": [0] * 6}
     mun, ufs = {}, {}
     def somar(a, m):
-        a["urnas"] += m["urnas"]; a["votos"] += m["votos"]; a["tarde"] += m["tarde"]; a["ut"] += m["urnas_tarde"]; a["enc"] += m["enc_atraso_min"]
+        a["urnas"] += m["urnas"]; a["votos"] += m["votos"]; a["apos17h"] += m["apos17h"]; a["ut"] += m["urnas_apos17h"]; a["enc"] += m["enc_atraso_min"]
         a["ult"] = max(a["ult"], m["ultimo_min"]); a["b"] = [x + y for x, y in zip(a["b"], m["bins"])]
     br = dict(nova(), h=None)
     for uf, d in bruto["uf"].items():
@@ -179,7 +179,7 @@ def recursos(ano):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--ano", default="2026"); ap.add_argument("--turno", default="1"); ap.add_argument("--ufs")
-    ap.add_argument("--saida", help="arquivo de saída (padrão dados/hist/<ano>-t<turno>-tarde.json)"); ap.add_argument("--converter", metavar="ARQ", help="converte um resultado bruto antigo para o formato do site e sai"); ap.add_argument("--processos", type=int, default=4); ap.add_argument("--fios", type=int, default=6, help="requisições simultâneas por processo"); ap.add_argument("--limite", type=int, help="só N urnas por UF (teste)")
+    ap.add_argument("--saida", help="arquivo de saída (padrão dados/hist/<ano>-t<turno>-apos17h.json)"); ap.add_argument("--converter", metavar="ARQ", help="converte um resultado bruto antigo para o formato do site e sai"); ap.add_argument("--processos", type=int, default=4); ap.add_argument("--fios", type=int, default=6, help="requisições simultâneas por processo"); ap.add_argument("--limite", type=int, help="só N urnas por UF (teste)")
     a = ap.parse_args()
     if a.converter:
         d = json.load(open(a.converter))
@@ -196,9 +196,9 @@ def main():
         for fut in cf.as_completed(futs):
             uf, urnas, b = fut.result(); baixado += b
             res[uf] = resumir(uf, urnas)
-            n = sum(m["votos"] for m in res[uf]["mun"].values()); t = sum(m["tarde"] for m in res[uf]["mun"].values())
+            n = sum(m["votos"] for m in res[uf]["mun"].values()); t = sum(m["apos17h"] for m in res[uf]["mun"].values())
             print(f"{uf}: {len(urnas)} urnas, {n:,} votos, {t:,} depois do encerramento ({t / max(n, 1):.2%}) · {b / 1e6:.0f} MB lidos · {time.time() - t0:.0f}s".replace(",", "."), flush=True)
-    saida = a.saida or os.path.join(RAIZ, "dados", "hist", f"{a.ano}-t{a.turno}-tarde.json")
+    saida = a.saida or os.path.join(RAIZ, "dados", "hist", f"{a.ano}-t{a.turno}-apos17h.json")
     os.makedirs(os.path.dirname(saida), exist_ok=True)
     json.dump(compactar({"ano": a.ano, "turno": a.turno, "janela_min": JANELA, "bins": ["0-5", "5-15", "15-30", "30-60", "60-120", "120+"], "uf": res}), open(saida, "w"), separators=(",", ":"))
     print("gravado", saida, f"{os.path.getsize(saida) / 1e6:.1f} MB · {baixado / 1e9:.1f} GB lidos em {time.time() - t0:.0f}s")
