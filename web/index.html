@@ -69,6 +69,7 @@
   [hidden] { display:none !important }
   #modos { display:flex; gap:8px; padding:0 16px 10px; flex-wrap:wrap } #modos button { font-weight:500 } #modos button.on { background:var(--fg); color:var(--bg) }
   body.cmp #linha, body.cmp #tempo { display:none !important }
+  #tardeSvg { width:100%; height:auto; display:block; margin-top:6px } #tardeSvg text { fill:var(--mut); font-size:9px; font-family:inherit } #tardeSvg .b1 { fill:var(--mut); opacity:.55 } #tardeSvg .b2 { fill:#d9480f }
   .dtab { width:100%; border-collapse:collapse; font-size:12px } .dtab th { color:var(--mut); font-weight:500; cursor:default; font-size:11px } .dtab td, .dtab th { padding:2px 4px; border-bottom:1px solid var(--line) }
   .dtab tr.dest td { font-weight:700 } #tip .dtab { min-width:260px }
   #barbox svg { width:100%; height:auto; max-height:76vh; display:block; touch-action:auto }
@@ -116,6 +117,7 @@
   <aside style="display:flex;flex-direction:column;gap:16px">
     <section class="card" id="cmpResumo" hidden></section>
     <section class="card" id="detalhe"></section>
+    <section class="card" id="tardeCard" hidden><div style="font-size:15px;font-weight:700" id="tardeTit"></div><div class="m" id="tardeSub"></div><svg id="tardeSvg" viewBox="0 0 400 150" role="img" aria-label="Votos por minuto em torno do encerramento"></svg><div class="m" id="tardeTxt"></div></section>
     <section class="card"><div class="seg" id="segTab" style="margin-bottom:8px"></div><div class="seg" id="segCTab" style="margin-bottom:8px" hidden></div><table id="tab"><thead></thead><tbody></tbody></table></section>
   </aside>
 </main>
@@ -132,7 +134,7 @@ const escuroAgora = () => document.documentElement.dataset.theme ? document.docu
 function rotuloTema() { const b = document.getElementById("tema"), e = escuroAgora(); b.textContent = e ? "☀ Tema claro" : "☾ Tema escuro"; b.setAttribute("aria-pressed", e); }
 try { const t = localStorage.getItem("tema"); if (t) document.documentElement.dataset.theme = t; } catch {}
 const st = { modo:"apuracao", cMet:"margem", cUnid:"abs", cEsc:"uf", cN:25, cTab:"uf", bEsc:"uf", bN:25, bCand:"ambos", bVal:"abs", bUnid:"pct", vista:"mapa", nivel:"estados", metrica:"voto", uf:null, pin:null, ord:"uf", asc:true, tab:"votos", zk:null };
-const METRICAS = { abst:["Abstenção","#b8860b"], brancos:["Brancos","#6d4fc2"], nulos:["Nulos","#d0489a"] };   // nivel: estados | municipios | uf
+const METRICAS = { abst:["Abstenção","#b8860b"], brancos:["Brancos","#6d4fc2"], nulos:["Nulos","#d0489a"], tarde:["Votos após as 17h","#d9480f"] };   // nivel: estados | municipios | uf
 let dados = null; const geos = {};
 { const t = new URLSearchParams(location.hash.slice(1)).get('tema'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; }   // #tema=dark força o tema
 new URLSearchParams(location.hash.slice(1)).forEach((v,k) => { if (k==='metrica'||k==='nivel'||k==='uf'||k==='tab'||k==='ord'||k==='eleicao'||k==='frame'||k==='pct'||k==='vista'||k==='bcand'||k==='bval'||k==='bunid'||k==='besc'||k==='bn'||k==='modo'||k==='cmet'||k==='cunid'||k==='cesc'||k==='cn'||k==='ctab') st[{frame:'frame0',bcand:'bCand',bval:'bVal',bunid:'bUnid',besc:'bEsc',bn:'bN',cmet:'cMet',cunid:'cUnid',cesc:'cEsc',cn:'cN',ctab:'cTab'}[k] ?? k]=(k==='pct'||k==='bn'||k==='cn')?+v:v; });   // ex.: #metrica=abst&nivel=uf&uf=sp&eleicao=2022-t2&pct=0.5 (pct = fração de urnas apuradas)
@@ -142,7 +144,7 @@ const pctApur = r => r && r.ts ? r.st/r.ts : 0;
 const pAbst = r => r && r.comp + r.abst ? r.abst/(r.comp + r.abst) : 0;
 const pBrancos = r => r && r.total ? r.brancos/r.total : 0;
 const pNulos = r => r && r.total ? r.nulos/r.total : 0;
-const valorMetrica = { abst:pAbst, brancos:pBrancos, nulos:pNulos };
+const valorMetrica = { abst:pAbst, brancos:pBrancos, nulos:pNulos, tarde:r => r?.tv?.votos ? r.tv.tarde / r.tv.votos : 0 };
 let escala = {};   // domínio máximo por métrica: percentil 95 dos municípios, para a cor não ficar toda no mesmo tom
 function calcEscala() {
   for (const k in valorMetrica) {
@@ -152,7 +154,7 @@ function calcEscala() {
 }
 const partes = r => { const t = r.v1 + r.v2; return t ? [r.v1/t, r.v2/t] : [0,0] };
 function cor(r) {
-  if (!r || !r.st) return css("--nada");
+  if (!r || (!r.st && st.metrica !== "tarde") || (st.metrica === "tarde" && !r.tv)) return css("--nada");
   if (st.metrica === "apuracao") return d3.interpolateRgb("#e4efec", css("--prog"))(pctApur(r));
   if (METRICAS[st.metrica]) return d3.interpolateRgb("#eeeeee", METRICAS[st.metrica][1])(Math.min(1, valorMetrica[st.metrica](r) / escala[st.metrica]));
   const [l,f] = partes(r), m = Math.max(-1, Math.min(1, (l-f)*2.5));
@@ -180,7 +182,8 @@ function blocoVotos(r, grande) {
     <div class="placar"><span class="l">${N1()} ${r.st ? pc(l) : "–"}</span><span class="f">${r.st ? pc(f) : "–"} ${N2()}</span></div>
     <div class="barra"><div style="width:${l*100}%;background:var(--cand1)"></div><div style="width:${f*100}%;background:var(--cand2)"></div></div>
     <div class="m">${fmt.format(r.v1)} × ${fmt.format(r.v2)} votos válidos (sobre ${N1()} + ${N2()})</div>
-    <div class="m" style="margin-top:4px">Abstenção <b>${r.st ? pc(pAbst(r)) : "–"}</b> (${fmt.format(r.abst)}) · Brancos <b>${r.st ? pc(pBrancos(r)) : "–"}</b> (${fmt.format(r.brancos)}) · Nulos <b>${r.st ? pc(pNulos(r)) : "–"}</b> (${fmt.format(r.nulos)})</div>`;
+    <div class="m" style="margin-top:4px">Abstenção <b>${r.st ? pc(pAbst(r)) : "–"}</b> (${fmt.format(r.abst)}) · Brancos <b>${r.st ? pc(pBrancos(r)) : "–"}</b> (${fmt.format(r.brancos)}) · Nulos <b>${r.st ? pc(pNulos(r)) : "–"}</b> (${fmt.format(r.nulos)})</div>
+    ${r.tv ? `<div class="m" style="margin-top:4px">Depois das 17h: <b>${fmt.format(r.tv.tarde)}</b> votos (${pc(r.tv.votos ? r.tv.tarde / r.tv.votos : 0)} dos votos do local), em ${fmt.format(r.tv.ut)} de ${fmt.format(r.tv.urnas)} urnas${r.tv.ult ? ` · último voto +${Math.round(r.tv.ult)} min` : ""}</div>` : ""}`;
 }
 const tipHtml = (nome, r) => `<b>${nome}</b><br>${blocoVotos(r)}`;
 
@@ -252,6 +255,7 @@ const notaAbst = () => replay?.abst_estimada && st.metrica === "abst" && st.fram
   ? ` · <b>abstenção estimada</b> neste replay (eleitores × seções apuradas − comparecimento)` : "";
 function legenda() {
   const M = METRICAS[st.metrica];
+  if (st.metrica === "tarde") { document.getElementById("leg").innerHTML = `<i style="background:linear-gradient(90deg,#eee,${M[1]})"></i><span>% dos votos confirmados <b>depois do encerramento (17h de Brasília)</b>: 0% → ${pc(escala.tarde)} (ou mais) · valor do dia inteiro, não muda com o slider · cinza = sem dados de log</span>`; return; }
   document.getElementById("leg").innerHTML = M
     ? `<i style="background:linear-gradient(90deg,#eee,${M[1]})"></i><span>${M[0]}: 0% → ${pc(escala[st.metrica])} (ou mais) · cinza = nenhuma urna apurada · % sobre ${st.metrica === "abst" ? "eleitores nas seções apuradas" : "votos totais apurados"}${notaAbst()}</span>`
     : st.metrica === "apuracao"
@@ -305,6 +309,7 @@ function configBarras(D) {
     if (st.bVal === "dist") return { abs:false, k, val:r => r[k] / tot };
     return { abs:false, k, val:r => (r.v1 + r.v2) ? r[k] / (r.v1 + r.v2) : 0 };
   }
+  if (M === "tarde") return st.bUnid === "abs" ? { abs:true, val:r => r.tv?.tarde ?? 0 } : { abs:false, val:valorMetrica.tarde };
   const campo = { abst:"abst", brancos:"brancos", nulos:"nulos" }[M];
   if (st.bUnid === "abs") return { abs:true, val:M === "apuracao" ? r => r.total : r => r[campo] };
   return { abs:false, val:M === "apuracao" ? pctApur : valorMetrica[M] };
@@ -367,9 +372,29 @@ function desenharBarras() {
     : st.bVal === "abs" ? `votos de ${nome} apurados em cada estado`
     : st.bVal === "dist" ? `parte da votação total de ${nome} (já apurada) que vem de cada estado: as barras somam 100%`
     : `% dos votos válidos que ${nome} tem em cada estado (sobre ${N1()} + ${N2()})`;
-  else txt = M === "apuracao" ? (cfg.abs ? "votos apurados (comparecimento já contado) em cada estado" : "% de urnas apuradas")
+  else txt = M === "tarde" ? (cfg.abs ? "votos confirmados depois das 17h (Brasília)" : "% dos votos do local confirmados depois das 17h") : M === "apuracao" ? (cfg.abs ? "votos apurados (comparecimento já contado) em cada estado" : "% de urnas apuradas")
     : `${METRICAS[M][0]} ${cfg.abs ? "(quantidade)" : "(% " + (M === "abst" ? "dos eleitores das seções apuradas" : "dos votos apurados") + ")"}`;
   document.getElementById("leg").innerHTML = `<i style="background:${cfg.empilhado ? "linear-gradient(90deg,var(--cand1) 50%,var(--cand2) 50%)" : cor1}"></i><span>${txt.replace(/em cada estado|de cada estado|que vem de cada estado|em cada estado/, m => mun ? m.replace("estado", "município") : m)}, ${mun ? `dos ${st.bN} municípios com maior valor para o menor` : "do estado com mais para o com menos"} · eixo fixo na escala do resultado final${temFinal ? " · contorno tracejado = total ao fim da apuração" : ""}${notaAbst()} · clique numa barra para ver os detalhes</span>`;
+}
+function desenharTarde() {
+  const card = document.getElementById("tardeCard");
+  card.hidden = !(TARDE && st.metrica === "tarde" && st.modo === "apuracao");
+  if (card.hidden) return;
+  const reg = st.pin ? (dados.mun[st.pin.k] ?? dados.ufs[st.pin.k]) : st.nivel === "uf" ? dados.ufs[st.uf] : dados.ufs.br;
+  const uf = st.pin ? (dados.mun[st.pin.k] ? dados.mun[st.pin.k].uf : st.pin.k) : st.nivel === "uf" ? st.uf : "br";
+  const u = TARDE.ufs[uf] ?? TARDE.ufs.br, h = u.h, [j0] = TARDE.janela_min;
+  document.getElementById("tardeTit").textContent = "Votos por minuto em torno das 17h";
+  document.getElementById("tardeSub").textContent = (uf === "br" ? "Brasil" : uf === "zz" ? "Exterior" : uf.toUpperCase()) + (st.pin && dados.mun[st.pin.k] ? " (onde fica " + dados.mun[st.pin.k].nm + ")" : "") + " · cada barra = 1 minuto, em relação ao horário de encerramento de cada urna";
+  const W = 400, H = 150, m = { l:34, r:6, t:8, b:24 }, n = h.length, bw = (W - m.l - m.r) / n, ymax = Math.max(...h, 1);
+  const y = d3.scaleLinear().domain([0, ymax]).nice().range([H - m.b, m.t]), x = i => m.l + i * bw;
+  const g = d3.select("#tardeSvg"); g.selectAll("*").remove();
+  y.ticks(3).forEach(v => { g.append("line").attr("x1", m.l).attr("x2", W - m.r).attr("y1", y(v)).attr("y2", y(v)).attr("stroke", css("--line")); g.append("text").attr("x", m.l - 4).attr("y", y(v)).attr("dy", "0.32em").attr("text-anchor", "end").text(compacto(v)); });
+  h.forEach((v, i) => g.append("rect").attr("class", i + j0 >= 0 ? "b2" : "b1").attr("x", x(i)).attr("width", Math.max(bw - 0.4, 0.6)).attr("y", y(v)).attr("height", H - m.b - y(v)));
+  [-60, -30, 0, 30, 60, 120, 180].forEach(t => { const i = t - j0; g.append("text").attr("x", x(i)).attr("y", H - m.b + 12).attr("text-anchor", "middle").text(t === 0 ? "encerra" : (t > 0 ? "+" : "") + t + " min"); });
+  g.append("line").attr("x1", x(-j0)).attr("x2", x(-j0)).attr("y1", m.t).attr("y2", H - m.b).attr("stroke", css("--fg")).attr("stroke-width", 1);
+  const apos = h.slice(-j0).reduce((a, b) => a + b, 0);
+  document.getElementById("tardeTxt").innerHTML = `Barras laranja = votos confirmados <b>depois</b> do encerramento (${fmt.format(u.tarde)} no total, ${pc(u.votos ? u.tarde / u.votos : 0)} dos ${fmt.format(u.votos)} votos; ${fmt.format(u.ut)} de ${fmt.format(u.urnas)} urnas passaram do horário).
+    O log da urna registra a hora de cada voto confirmado, mas não em quem: o voto é secreto. Quem estava na fila às 17h ainda vota.`;
 }
 function seg(id, opts, key) {
   const el = document.getElementById(id); el.innerHTML = "";
@@ -381,7 +406,7 @@ function aplicarModo() {
   document.body.classList.toggle("cmp", c);
   document.getElementById("cmpBar").hidden = !c; document.getElementById("cmpResumo").hidden = !c; document.getElementById("segCTab").hidden = !c;
   document.getElementById("mainBar").hidden = c; document.getElementById("segTab").hidden = c;
-  if (c) document.getElementById("barOpc").hidden = true;
+  if (c) { document.getElementById("barOpc").hidden = true; document.getElementById("tardeCard").hidden = true; }
   const el = document.getElementById("modos"); el.innerHTML = "";
   [["apuracao", "Apuração de cada eleição"], ["comparar", "Comparar 1º e 2º turno de 2026"]].forEach(([v, t]) => {
     const b = document.createElement("button"); b.textContent = t; b.className = st.modo === v ? "on" : ""; b.setAttribute("aria-pressed", st.modo === v);
@@ -396,7 +421,7 @@ function render() {
   seg("segVista", [["mapa","Mapa"],["barras","Barras"]], "vista");
   seg("segNivel", [["estados","Estados"],["municipios","Municípios do Brasil"]], "nivel");
   if (st.nivel === "uf") document.querySelectorAll("#segNivel button").forEach(b => b.className = "");
-  seg("segMetrica", [["voto","Votos válidos"],["apuracao","Urnas apuradas"],["abst","Abstenção"],["brancos","Brancos"],["nulos","Nulos"]], "metrica");
+  seg("segMetrica", [["voto","Votos válidos"],["apuracao","Urnas apuradas"],["abst","Abstenção"],["brancos","Brancos"],["nulos","Nulos"], ...(TARDE ? [["tarde","Votos após as 17h"]] : [])], "metrica");
   { const el = document.getElementById("segTab"); el.innerHTML = "";
     [["votos","Votos"],["outros","Abstenção, brancos e nulos"]].forEach(([v,t]) => { const b = document.createElement("button"); b.textContent = t; b.className = st.tab === v ? "on" : ""; b.onclick = () => { st.tab = v; tabela(); document.querySelectorAll("#segTab button").forEach(x => x.className = x.textContent === t ? "on" : ""); }; el.appendChild(b); }); }
   const barras = st.vista === "barras", M = st.metrica;
@@ -414,7 +439,7 @@ function render() {
   document.getElementById("segNivel").hidden = barras; document.getElementById("svgwrap").hidden = barras; document.getElementById("barbox").hidden = !barras;
   voltar.hidden = barras || st.nivel !== "uf";
   titulo.textContent = barras ? (st.bEsc === "mun" ? "Municípios do maior para o menor valor" : "Estados do maior para o menor valor") : st.nivel === "uf" ? st.uf.toUpperCase() + " por município" : "";
-  detalhe(); tabela(); barras ? desenharBarras() : desenhar();
+  detalhe(); tabela(); desenharTarde(); barras ? desenharBarras() : desenhar();
 }
 voltar.onclick = () => { st.nivel = "estados"; st.uf = null; st.pin = null; render(); };
 
@@ -466,6 +491,20 @@ async function prepararReplay() {
   } catch { replay = null; }   // sem arquivo de replay: segue só com o resultado final
 }
 const cacheReplay = {};
+/* votos confirmados depois do encerramento (17h de Brasília), contados nos logs das urnas: dados/hist/<eleição>-tarde.json (votos_tarde.py) */
+let TARDE = null; const cacheTarde = {};
+async function prepararTarde() {
+  TARDE = null;
+  try {
+    if (!(st.eleicao in cacheTarde)) { const r = await fetch(`../dados/hist/${st.eleicao}-tarde.json`); cacheTarde[st.eleicao] = r.ok ? await r.json() : null; }
+    TARDE = cacheTarde[st.eleicao];
+  } catch { TARDE = null; }
+  if (TARDE && final) {
+    for (const [k, r] of Object.entries(final.mun)) r.tv = TARDE.mun[k];
+    for (const [k, r] of Object.entries(final.ufs)) r.tv = TARDE.ufs[k];
+  }
+  if (!TARDE && st.metrica === "tarde") st.metrica = "voto";
+}
 // último acumulado do município até o quadro f (entradas só existem nos quadros em que ele mudou)
 function noQuadro(e, f) {
   let lo = 0, hi = e.length - 1, r = -1;
@@ -479,12 +518,12 @@ function estadoNoQuadro(f) {
     const e = noQuadro(m.e, f), nm = final.mun[k]?.nm ?? k;
     const r = { ts:m.ts, st:e ? e[1] : 0, eleitores:0, comp:e ? e[2] : 0, abst:e ? e[3] : 0, v1:e ? e[4] : 0, v2:e ? e[5] : 0,
                 brancos:e ? e[6] : 0, nulos:e ? e[7] : 0, uf:m.u, nm, dg, hg:"", tf: ultimo };
-    r.total = r.comp; r.validos = r.v1 + r.v2;
+    r.total = r.comp; r.validos = r.v1 + r.v2; r.tv = final.mun[k]?.tv;
     if (k !== "zz") mun[k] = r;
     for (const key of [m.u, "br"]) { const a = ufs[key] ??= soma();
       for (const c of ["ts","st","comp","abst","v1","v2","brancos","nulos","total","validos"]) a[c] += r[c]; }
   }
-  for (const a of Object.values(ufs)) Object.assign(a, { dg, hg:"", tf: ultimo });
+  for (const [key, a] of Object.entries(ufs)) Object.assign(a, { dg, hg:"", tf: ultimo, tv: final.ufs[key]?.tv });
   return { ufs, mun, cands: final.cands, eleicao: final.eleicao, gerado: dg };
 }
 const quadroPorPct = p => { const F = replay.frames; let lo = 0, hi = F.length - 1;
@@ -525,7 +564,7 @@ function desenharLinha() {
 }
 async function trocar(e) {
   if (e === st.eleicao && dados) return;
-  try { const d = await buscar(e); st.eleicao = e; final = d; dados = d; st.frame = null; await prepararReplay(); aplicar(); }
+  try { const d = await buscar(e); st.eleicao = e; final = d; dados = d; st.frame = null; await prepararReplay(); await prepararTarde(); aplicar(); }
   catch { document.getElementById("meta").textContent = e === "live" ? "dados ao vivo indisponíveis: rode o coletor (python3 apuracao.py) localmente" : "dados desta eleição indisponíveis (rode historico2022.py / --arquivar)"; }
 }
 function metaTexto() {   // no ao vivo, mostra há quanto tempo o coletor gerou o dado (alerta se passar de 2 min)
@@ -551,7 +590,7 @@ function aplicar() {
   render();
 }
 async function carregar() {
-  try { dados = final = await buscar(st.eleicao); st.frame = null; await prepararReplay(); aplicar(); }
+  try { dados = final = await buscar(st.eleicao); st.frame = null; await prepararReplay(); await prepararTarde(); aplicar(); }
   catch (e) {
     // versão publicada (GitHub Pages) não tem coletor: sem dados ao vivo, abre a eleição mais recente com resultado arquivado
     if (st.eleicao === "live" && !new URLSearchParams(location.hash.slice(1)).has("eleicao")) {

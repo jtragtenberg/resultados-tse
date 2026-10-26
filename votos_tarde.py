@@ -142,6 +142,34 @@ def resumir(uf, urnas):
     return {"mun": out_mun, "hist_min": hist}
 
 
+CM = "https://resultados.tse.jus.br/oficial/ele2026/6257/config/mun-e006257-cm.json"
+SOMA = ("urnas", "votos", "tarde", "urnas_tarde", "enc_atraso_min")
+
+
+def compactar(bruto):
+    """Formato do site: municípios por código IBGE (o exterior fica só em ufs.zz), totais por UF e histograma por minuto."""
+    cm = json.load(urllib.request.urlopen(urllib.request.Request(CM, headers=UA), timeout=60))
+    ibge = {m["cd"]: m["cdi"] for ab in cm["abr"] for m in ab["mu"]}
+    nova = lambda: {"urnas": 0, "votos": 0, "tarde": 0, "ut": 0, "enc": 0.0, "ult": 0.0, "b": [0] * 6}
+    mun, ufs = {}, {}
+    def somar(a, m):
+        a["urnas"] += m["urnas"]; a["votos"] += m["votos"]; a["tarde"] += m["tarde"]; a["ut"] += m["urnas_tarde"]; a["enc"] += m["enc_atraso_min"]
+        a["ult"] = max(a["ult"], m["ultimo_min"]); a["b"] = [x + y for x, y in zip(a["b"], m["bins"])]
+    br = dict(nova(), h=None)
+    for uf, d in bruto["uf"].items():
+        u = ufs.setdefault(uf.lower(), dict(nova(), h=[0] * len(d["hist_min"])))
+        u["h"] = [x + y for x, y in zip(u["h"], d["hist_min"])]
+        br["h"] = [x + y for x, y in zip(br["h"] or [0] * len(d["hist_min"]), d["hist_min"])]
+        for cod, m in d["mun"].items():
+            somar(u, m); somar(br, m)
+            if uf != "ZZ" and cod.zfill(5) in ibge:
+                a = mun.setdefault(ibge[cod.zfill(5)], dict(nova(), u=uf.lower())); somar(a, m)
+    ufs["br"] = br
+    for a in list(mun.values()) + list(ufs.values()):
+        a["enc"] = round(a["enc"] / a["urnas"], 1) if a["urnas"] else 0; a["ult"] = round(a["ult"], 1)
+    return {"ano": bruto.get("ano"), "turno": bruto.get("turno"), "janela_min": bruto["janela_min"], "bins": bruto["bins"], "mun": mun, "ufs": ufs}
+
+
 def recursos(ano):
     d = json.load(urllib.request.urlopen(urllib.request.Request(f"https://dadosabertos.tse.jus.br/api/3/action/package_show?id=resultados-{ano}-arquivos-transmitidos-para-totalizacao", headers=UA), timeout=60))["result"]
     return {(re.search(r"_(\d)t_([A-Z]{2})\.zip$", r["url"]).group(1), re.search(r"_(\d)t_([A-Z]{2})\.zip$", r["url"]).group(2)): r["url"]
@@ -151,8 +179,12 @@ def recursos(ano):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--ano", default="2026"); ap.add_argument("--turno", default="1"); ap.add_argument("--ufs")
-    ap.add_argument("--processos", type=int, default=4); ap.add_argument("--fios", type=int, default=6, help="requisições simultâneas por processo"); ap.add_argument("--limite", type=int, help="só N urnas por UF (teste)")
+    ap.add_argument("--saida", help="arquivo de saída (padrão dados/hist/<ano>-t<turno>-tarde.json)"); ap.add_argument("--converter", metavar="ARQ", help="converte um resultado bruto antigo para o formato do site e sai"); ap.add_argument("--processos", type=int, default=4); ap.add_argument("--fios", type=int, default=6, help="requisições simultâneas por processo"); ap.add_argument("--limite", type=int, help="só N urnas por UF (teste)")
     a = ap.parse_args()
+    if a.converter:
+        d = json.load(open(a.converter))
+        if "mun" in d: sys.exit("já está no formato do site")
+        json.dump(compactar(d), open(a.converter, "w"), separators=(",", ":")); print("convertido", a.converter, f"{os.path.getsize(a.converter) / 1e6:.1f} MB"); return
     rec = {uf: u for (t, uf), u in recursos(a.ano).items() if t == a.turno}
     if a.ufs: rec = {k: v for k, v in rec.items() if k in a.ufs.upper().split(",")}
     if not rec: sys.exit("nenhum arquivo para esse ano/turno (o TSE ainda não publicou?)")
@@ -166,9 +198,9 @@ def main():
             res[uf] = resumir(uf, urnas)
             n = sum(m["votos"] for m in res[uf]["mun"].values()); t = sum(m["tarde"] for m in res[uf]["mun"].values())
             print(f"{uf}: {len(urnas)} urnas, {n:,} votos, {t:,} depois do encerramento ({t / max(n, 1):.2%}) · {b / 1e6:.0f} MB lidos · {time.time() - t0:.0f}s".replace(",", "."), flush=True)
-    saida = os.path.join(RAIZ, "dados", "hist", f"{a.ano}-t{a.turno}-tarde.json")
+    saida = a.saida or os.path.join(RAIZ, "dados", "hist", f"{a.ano}-t{a.turno}-tarde.json")
     os.makedirs(os.path.dirname(saida), exist_ok=True)
-    json.dump({"ano": a.ano, "turno": a.turno, "janela_min": JANELA, "bins": ["0-5", "5-15", "15-30", "30-60", "60-120", "120+"], "uf": res}, open(saida, "w"), separators=(",", ":"))
+    json.dump(compactar({"ano": a.ano, "turno": a.turno, "janela_min": JANELA, "bins": ["0-5", "5-15", "15-30", "30-60", "60-120", "120+"], "uf": res}), open(saida, "w"), separators=(",", ":"))
     print("gravado", saida, f"{os.path.getsize(saida) / 1e6:.1f} MB · {baixado / 1e9:.1f} GB lidos em {time.time() - t0:.0f}s")
 
 
