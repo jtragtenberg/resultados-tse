@@ -24,6 +24,7 @@
   @media (prefers-reduced-motion:reduce) { * { transition:none !important; animation:none !important } }
   header { background:var(--tse-amarelo); color:var(--tse-texto); padding:12px 16px; margin-bottom:12px; display:flex; flex-wrap:wrap; gap:4px 24px; align-items:baseline; justify-content:space-between }
   h1 { font-size:18px; font-weight:700; margin:0 } #sub { font-weight:500; margin-left:8px } #meta { font-size:12px; color:var(--tse-texto) } header .dir { display:flex; gap:12px; align-items:center }
+  #copiar { background:transparent; border:1px solid var(--tse-texto); color:var(--tse-texto); padding:2px 10px; font-size:12px }
   #tema { background:transparent; border:1px solid var(--tse-texto); color:var(--tse-texto); padding:2px 10px; font-size:12px }
   footer { padding:0 16px 24px; font-size:12px; color:var(--mut) } footer a { color:var(--tse-acao) }
   .big { font-size:26px; font-weight:700; line-height:1.15 }
@@ -83,7 +84,7 @@
 <body>
 <header>
   <h1>Apuração presidente<span id="sub"><span id="n1">Lula</span> x <span id="n2">Flávio Bolsonaro</span></span></h1>
-  <div class="dir"><div id="meta">carregando…</div><button id="tema" aria-pressed="false" title="alternar tema claro/escuro"></button></div>
+  <div class="dir"><div id="meta">carregando…</div><button id="copiar" title="copia o endereço desta visualização">🔗 Copiar link</button><button id="tema" aria-pressed="false" title="alternar tema claro/escuro"></button></div>
 </header>
 <nav id="modos" aria-label="Modo de visualização"></nav>
 <nav id="linha" aria-label="Linha do tempo de eleições"></nav>
@@ -137,7 +138,13 @@ const st = { modo:"apuracao", cMet:"margem", cUnid:"abs", cEsc:"uf", cN:25, cTab
 const METRICAS = { abst:["Abstenção","#b8860b"], brancos:["Brancos","#6d4fc2"], nulos:["Nulos","#d0489a"], tarde:["Votos após as 17h","#d9480f"] };   // nivel: estados | municipios | uf
 let dados = null; const geos = {};
 { const t = new URLSearchParams(location.hash.slice(1)).get('tema'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; }   // #tema=dark força o tema
-new URLSearchParams(location.hash.slice(1)).forEach((v,k) => { if (k==='metrica'||k==='nivel'||k==='uf'||k==='tab'||k==='ord'||k==='eleicao'||k==='frame'||k==='pct'||k==='vista'||k==='bcand'||k==='bval'||k==='bunid'||k==='besc'||k==='bn'||k==='modo'||k==='cmet'||k==='cunid'||k==='cesc'||k==='cn'||k==='ctab') st[{frame:'frame0',bcand:'bCand',bval:'bVal',bunid:'bUnid',besc:'bEsc',bn:'bN',cmet:'cMet',cunid:'cUnid',cesc:'cEsc',cn:'cN',ctab:'cTab'}[k] ?? k]=(k==='pct'||k==='bn'||k==='cn')?+v:v; });   // ex.: #metrica=abst&nivel=uf&uf=sp&eleicao=2022-t2&pct=0.5 (pct = fração de urnas apuradas)
+/* O endereço (#...) guarda a visualização: eleição, modo, abas, escala, região selecionada e % da apuração. Copie o link para compartilhar. */
+const CHAVES_URL = { metrica:"metrica", nivel:"nivel", uf:"uf", tab:"tab", ord:"ord", eleicao:"eleicao", pct:"pct", vista:"vista", bcand:"bCand", bval:"bVal", bunid:"bUnid", besc:"bEsc", bn:"bN",
+  modo:"modo", cmet:"cMet", cunid:"cUnid", cesc:"cEsc", cn:"cN", ctab:"cTab", frame:"frame0" };
+new URLSearchParams(location.hash.slice(1)).forEach((v, k) => {
+  if (k === "sel") st.pin = { k:v, nome:"" };
+  else if (CHAVES_URL[k]) st[CHAVES_URL[k]] = (k === "pct" || k === "bn" || k === "cn") ? +v : v;   // pct = fração de urnas apuradas
+});
 
 const N1 = () => (dados?.cands?.v1 ?? "Lula").split(" ")[0], N2 = () => (dados?.cands?.v2 ?? "Flávio").split(" ").slice(-1)[0];
 const pctApur = r => r && r.ts ? r.st/r.ts : 0;
@@ -265,7 +272,7 @@ function legenda() {
 
 function detalhe() {
   let nome, r;
-  if (st.pin) { nome = st.pin.nome; r = dados.mun[st.pin.k] ?? dados.ufs[st.pin.k]; }
+  if (st.pin) { r = dados.mun[st.pin.k] ?? dados.ufs[st.pin.k]; nome = st.pin.nome || (dados.mun[st.pin.k] ? `${r.nm} – ${r.uf.toUpperCase()}` : st.pin.k === "zz" ? "Exterior" : st.pin.k.toUpperCase()); }
   else if (st.nivel === "uf") { nome = st.uf.toUpperCase(); r = dados.ufs[st.uf]; }
   else { nome = "Brasil"; r = dados.ufs.br; }
   document.getElementById("detalhe").innerHTML = `<div style="font-size:16px;font-weight:700;margin-bottom:4px">${nome}${r?.tf ? ' <span class="m">· totalização final</span>' : ""}</div>${blocoVotos(r, true)}
@@ -401,6 +408,21 @@ function seg(id, opts, key) {
   opts.forEach(([val, rotulo]) => { const b = document.createElement("button"); b.textContent = rotulo; b.className = st[key] === val ? "on" : "";
     b.onclick = () => { st[key] = val; if (key === "nivel" && val !== "uf") { st.uf = null; st.pin = null; } render(); }; el.appendChild(b); });
 }
+const PADRAO = { metrica:"voto", nivel:"estados", vista:"mapa", tab:"votos", bCand:"ambos", bVal:"abs", bUnid:"pct", bEsc:"uf", bN:25, cMet:"margem", cUnid:"abs", cEsc:"uf", cN:25, cTab:"uf" };
+const NOMES_URL = { metrica:"metrica", nivel:"nivel", vista:"vista", tab:"tab", bCand:"bcand", bVal:"bval", bUnid:"bunid", bEsc:"besc", bN:"bn", cMet:"cmet", cUnid:"cunid", cEsc:"cesc", cN:"cn", cTab:"ctab" };
+function salvarHash() {   // reflete a visualização atual no endereço, sem criar histórico de navegação
+  const p = new URLSearchParams(), add = k => { if (st[k] !== PADRAO[k]) p.set(NOMES_URL[k], st[k]); };
+  if (st.modo === "comparar") { p.set("modo", "comparar"); ["vista", "nivel", "cMet", "cUnid", "cTab"].forEach(add); if (st.vista === "barras") { add("cEsc"); if (st.cEsc === "mun") add("cN"); } }
+  else {
+    const padrao = ELEICOES.filter(e => !e.live).at(-1).id; if (st.eleicao !== padrao) p.set("eleicao", st.eleicao);
+    ["metrica", "nivel", "vista", "tab"].forEach(add);
+    if (st.vista === "barras") { ["bEsc", "bN", "bCand", "bVal", "bUnid"].forEach(add); }
+    if (replay && st.frame != null && st.pct != null && st.pct < 1) p.set("pct", (+st.pct).toFixed(4));
+  }
+  if (st.nivel === "uf" && st.uf) p.set("uf", st.uf);
+  if (st.pin) p.set("sel", st.pin.k);
+  try { history.replaceState(null, "", location.pathname + location.search + (p.toString() ? "#" + p : "")); } catch {}
+}
 function aplicarModo() {
   const c = st.modo === "comparar";
   document.body.classList.toggle("cmp", c);
@@ -413,6 +435,7 @@ function aplicarModo() {
     b.onclick = () => { if (st.modo === v) return; st.modo = v; st.pin = null; st.zk = null; v === "apuracao" ? aplicar() : render(); }; el.appendChild(b); });
 }
 function render() {
+  salvarHash();
   if (st.modo === "comparar") { aplicarModo(); return renderComparar(); }
   aplicarModo();
   if (!dados) return;
@@ -605,6 +628,12 @@ document.addEventListener("keydown", ev => {   // ← / → andam na linha do te
   const i = ELEICOES.findIndex(e => e.id === st.eleicao) + (ev.key === "ArrowRight" ? 1 : -1);
   if (ELEICOES[i]) trocar(ELEICOES[i].id);
 });
+document.getElementById("copiar").onclick = async () => {
+  salvarHash(); const b = document.getElementById("copiar"), url = location.href;
+  try { await navigator.clipboard.writeText(url); b.textContent = "✔ Link copiado"; }
+  catch { prompt("Copie o endereço desta visualização:", url); b.textContent = "🔗 Copiar link"; return; }
+  setTimeout(() => { b.textContent = "🔗 Copiar link"; }, 1800);
+};
 rotuloTema();
 document.getElementById("tema").onclick = () => {
   const novo = escuroAgora() ? "light" : "dark";
