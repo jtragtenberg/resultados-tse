@@ -439,12 +439,15 @@ function render() {
   if (st.modo === "comparar") { aplicarModo(); return renderComparar(); }
   aplicarModo();
   if (!dados) return;
+  if (st.metrica === "tarde" && !TARDE) {   // só há contagem de votos após as 17h em algumas eleições: leva para uma delas
+    const e = ELEICOES.find(x => x.tarde); if (e && e.id !== st.eleicao) { trocar(e.id); return; } st.metrica = "voto";
+  }
   tip(null, null);   // um card de tooltip antigo não deve sobreviver a uma nova renderização
   calcEscala();
   seg("segVista", [["mapa","Mapa"],["barras","Barras"]], "vista");
   seg("segNivel", [["estados","Estados"],["municipios","Municípios do Brasil"]], "nivel");
   if (st.nivel === "uf") document.querySelectorAll("#segNivel button").forEach(b => b.className = "");
-  seg("segMetrica", [["voto","Votos válidos"],["apuracao","Urnas apuradas"],["abst","Abstenção"],["brancos","Brancos"],["nulos","Nulos"], ...(TARDE ? [["tarde","Votos após as 17h"]] : [])], "metrica");
+  seg("segMetrica", [["voto","Votos válidos"],["apuracao","Urnas apuradas"],["abst","Abstenção"],["brancos","Brancos"],["nulos","Nulos"], ["tarde", TARDE ? "Votos após as 17h" : "Votos após as 17h (1º turno 2026) ↗"]], "metrica");
   { const el = document.getElementById("segTab"); el.innerHTML = "";
     [["votos","Votos"],["outros","Abstenção, brancos e nulos"]].forEach(([v,t]) => { const b = document.createElement("button"); b.textContent = t; b.className = st.tab === v ? "on" : ""; b.onclick = () => { st.tab = v; tabela(); document.querySelectorAll("#segTab button").forEach(x => x.className = x.textContent === t ? "on" : ""); }; el.appendChild(b); }); }
   const barras = st.vista === "barras", M = st.metrica;
@@ -468,7 +471,7 @@ voltar.onclick = () => { st.nivel = "estados"; st.uf = null; st.pin = null; rend
 
 const ELEICOES = [
   { id:"2022-t1", rotulo:"2022 · 1º turno", replay:true }, { id:"2022-t2", rotulo:"2022 · 2º turno", replay:true },
-  { id:"2026-t1", rotulo:"2026 · 1º turno", replay:true }, { id:"2026-t2", rotulo:"2026 · 2º turno", replay:true },
+  { id:"2026-t1", rotulo:"2026 · 1º turno", replay:true, tarde:true }, { id:"2026-t2", rotulo:"2026 · 2º turno", replay:true },
 ];
 /* Fonte dos dados ao vivo (só numa eleição em andamento): ?api=URL > web/config.js. Vazia = sem botão "Ao vivo". */
 const API = (() => {
